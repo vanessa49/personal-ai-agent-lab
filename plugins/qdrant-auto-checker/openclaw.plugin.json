@@ -1,0 +1,1 @@
+{"id":"qdrant-auto-checker","name":"Qdrant Auto Checker","description":"检测到 Qdrant 关键词时自动注入检查指令","version":"1.0.0","configSchema":{"type":"object","additionalProperties":false,"properties":{}}}

@@ -1,0 +1,18 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files (not for public repo)
+*.jsonl
+*.sqlite
+*.log
+*.zip
+
+# Secrets
+.env
+config/openclaw.json
+
+# OS
+.DS_Store
+Thumbs.db

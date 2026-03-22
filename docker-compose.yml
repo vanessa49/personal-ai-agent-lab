@@ -1,0 +1,26 @@
+version: "3"
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw
+    restart: unless-stopped
+    environment:
+      - OLLAMA_API_KEY=ollama-local
+      - OLLAMA_HOST=http://<OLLAMA_HOST>:11434
+      - OPENCLAW_LOG_LEVEL=info
+      - OPENCLAW_TOOL_LOGGING=true
+    volumes:
+      - /path/to/openclaw/config:/home/node/.openclaw
+      - /path/to/ai-agent:/ai-agent
+      - /path/to/nas-root:/nas   # optional, remove if not needed
+    ports:
+      - "18789:18789"
+    networks:
+      - openclaw_default
+      - qdrant_default
+
+networks:
+  openclaw_default:
+    driver: bridge
+  qdrant_default:
+    external: true

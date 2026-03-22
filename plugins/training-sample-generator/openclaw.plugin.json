@@ -1,0 +1,40 @@
+{
+  "id": "training-sample-generator",
+  "name": "Training Sample Generator",
+  "version": "1.0.0",
+  "description": "自动评分对话质量，生成训练样本，检查微调触发条件",
+  "author": "AI Agent System",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "feishuToken": {
+        "type": "string",
+        "description": "飞书机器人 Token（可选，用于实时通知）"
+      },
+      "feishuChatId": {
+        "type": "string",
+        "description": "飞书群聊 ID"
+      },
+      "scoreThreshold": {
+        "type": "number",
+        "default": 7,
+        "description": "训练样本评分阈值（>= 此值才生成样本）"
+      },
+      "samplesTrigger": {
+        "type": "number",
+        "default": 500,
+        "description": "触发微调的样本数量阈值"
+      },
+      "daysSinceLastTrain": {
+        "type": "number",
+        "default": 30,
+        "description": "距上次微调的天数阈值"
+      },
+      "minNewSamples": {
+        "type": "number",
+        "default": 100,
+        "description": "定期微调的最小新增样本数"
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "memory-compressor",
+  "name": "Memory Compressor",
+  "version": "1.0.0",
+  "description": "自动压缩对话记忆和日志，实现 AGENTS.md 第五、六步",
+  "author": "AI Agent System",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "conversationTurnThreshold": {
+        "type": "number",
+        "default": 20,
+        "description": "触发对话压缩的轮数阈值"
+      },
+      "logLineThreshold": {
+        "type": "number",
+        "default": 100,
+        "description": "触发日志压缩的行数阈值"
+      },
+      "keepRecentLogs": {
+        "type": "number",
+        "default": 20,
+        "description": "日志压缩时保留的最新条目数"
+      },
+      "summaryMaxLength": {
+        "type": "number",
+        "default": 500,
+        "description": "对话摘要的最大字符数"
+      },
+      "feishuToken": {
+        "type": "string",
+        "description": "飞书机器人 Token（可选）"
+      },
+      "feishuChatId": {
+        "type": "string",
+        "description": "飞书群聊 ID"
+      }
+    }
+  }
+}

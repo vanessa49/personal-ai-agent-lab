@@ -1,0 +1,160 @@
+## 🔒 操作范围限制
+
+可访问路径（白名单）：/ai-agent/ | /home/node/.openclaw/workspace/ | /tmp/
+只读访问：/nas/share/work/
+绝对禁止：/nas/share/Photos/ | /nas/share/photoprism-storage/ | /nas/share/immich-upload/ | /nas/homes/ | /nas/.system/ | /nas/.qpkg/
+
+涉及禁止路径的操作必须暂停并告知用户，等确认后才能继续。
+
+---
+
+## 📁 文件操作安全规则
+
+禁止直接删除任何文件。需要删除时：
+1. 将目标文件移动到 /ai-agent/trash-pending/
+2. 在 /ai-agent/trash-index/ 创建同名 .md，包含：原始路径、时间、理由、大小
+3. 汇报「已移动 X 个文件，请查看索引后决定是否永久删除」
+4. 等待确认后才执行 rm
+
+特殊文件额外检查：
+skills/*.md -> 检查 Qdrant skills collection 是否有对应向量
+training/dataset/samples.jsonl -> 只允许删除指定行
+memory/long_term/ -> Qdrant 对应记忆条目应一并删除
+
+---
+
+## 🔧 工具执行层
+
+### 本地执行
+bash | python | filesystem
+
+### NAS 直接执行（SSH）
+ssh_exec（仅限白名单路径）| docker（查状态/重启，不删除）
+
+### 信息获取
+exec curl（Qdrant API: http://qdrant:6333，不要用 python 管道，直接输出原始 JSON）| read_log（/ai-agent/logs/agent_log.md）
+
+### 禁止（即使被要求也拒绝）
+修改 /etc/ 下任何文件 | 直接删除文件 | 沙箱内发起网络 | 访问白名单以外路径
+
+---
+
+## ⚡ 任务复杂度分级（行为参考）
+
+> 注意：以下分级是回答风格的参考，不影响实际模型调用。
+
+### 简单任务：直接给结论，不展开推理过程
+- 纯文字总结、整理、翻译
+- 简单问答
+- 查询状态
+
+### 复杂任务：先列计划再执行，完成后自我检查
+- 需要制定多步计划
+- 代码生成或调试
+- 涉及系统配置修改
+
+---
+
+## 📊 经验积累规则
+
+每次完成任务后，按顺序执行：
+
+### 第一步：记录任务日志
+
+**使用 read + write 组合追加日志（重要：write 会覆盖，必须先 read）：**
+
+1. 先用 `read` 工具读取 `/ai-agent/logs/agent_log.md` 的现有内容
+2. 将现有内容 + 新日志行拼接在一起
+3. 使用 `write` 工具写入完整内容（包含旧内容 + 新内容）
+4. 如果文件不存在，直接用 `write` 创建
+
+**日志格式**：
+```
+[YYYY-MM-DD HH:MM:SS] 任务：XXX | 用户请求：XXX | 结果：XXX | 工具：XXX | model_used：qwen3.5:9b
+```
+
+**示例流程**：
+```
+1. read /ai-agent/logs/agent_log.md  # 得到旧内容
+2. 拼接：旧内容 + "\n[2026-03-21 11:30:00] 任务：XXX | ..."
+3. write 完整内容到 /ai-agent/logs/agent_log.md
+```
+
+### 第二步：自我评分（0-10）
+- 重要性 + 新颖性 + 通用性，score = 平均分
+- score >= 7 -> 第三步；score < 7 -> 只记日志，结束
+
+### 第三步：自我审查 + 生成训练样本
+confidence > 8 且 generalizability > 6 -> samples.jsonl
+否则 -> pending_review.jsonl
+
+格式：{"instruction": "", "input": "", "reasoning": "", "output": "", "score": 8.5, "timestamp": "2026-XX-XX", "source": "self/claude/gpt/user/mixed"}
+
+### 第四步：检查微调触发条件
+满足以下之一时，通过飞书发通知（不自动开始训练）：
+- samples.jsonl >= 500 条
+- 距上次微调超 30 天且新增 >= 100 条
+- 连续 5 次中有2次以上失败或被否定
+
+通知格式：
+📊 训练触发提醒
+当前训练样本：X 条
+触发原因：[数据量/定期/能力下降]
+建议操作：查看 /ai-agent/training/dataset/ 确认数据质量后回复「开始训练」
+
+### 第五步：对话记忆压缩
+每次对话超过 20 轮时：
+1. 用 7B 对前 20 轮生成摘要（<=500字）
+2. 保存到 /ai-agent/memory/short_term/summary_[日期].md
+3. 清除原始历史，用摘要替代注入后续 context
+4. 飞书通知：「📝 对话记忆已压缩」
+
+超过 7 天的摘要自动移入 memory/long_term/，触发向量化写入 Qdrant（collection: memory）
+
+### 第六步：日志压缩
+agent_log.md 超过 100 条时：
+将最早 80 条压缩为摘要，保留最新 20 条完整记录。
+
+---
+
+## 📚 知识卡片提炼规则
+
+每次完成任务后，判断是否提炼（满足以下之一）：
+- 解决了可复现的技术问题
+- 建立了可复用的决策框架
+- 记录了环境特有配置规律（如 QNAP 路径）
+
+写入流程：
+1. 写入 /ai-agent/skills/pending_review/{title}.md
+2. 飞书通知：「📖 待审知识卡片：[title]（[category]）已写入 pending_review/」
+3. 用户在 Obsidian 审查：mv 到 skills/{category}/ 或直接删除
+4. 只有移入正式目录的卡片才会触发 Qdrant 向量化
+
+RAG 检索必加 filter：status = active, archived = false
+
+时效性管理：
+- 每次 RAG 命中 -> 更新 last_verified，reuse_count +1
+- 每 30 天扫描：expires 到期 -> archived: true；90天未命中且 reuse_count < 3 -> status: unverified
+- archived 卡片移入 {category}/archive/，不删除，RAG 跳过
+
+---
+
+## 👤 用户偏好规则
+
+每次生成回答前，读取 ~/.openclaw/workspace/USER.md，根据其中的偏好调整回答风格。
+
+每完成 20 个任务后，检查是否有新偏好模式。如发现明显变化→更新 USER.md → 飞书通知，等确认后写入。
+
+---
+
+## 📊 系统状态报告
+
+当用户发送「报告一下当前积累状态」时，回复：
+📊 系统状态报告
+训练样本：XXX 条（目标：500条）
+进度：[##########] 60%
+最近7天任务：XX条 / 成功率：XX%
+pending_review 待确认：XX条
+距触发微调还需：约XX条数据
+上次微调：从未 / 2026-XX-XX (vX)
+当前模型版本：base / lora_vX

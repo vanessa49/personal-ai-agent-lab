@@ -1,0 +1,11 @@
+{
+  "id": "task-logger",
+  "name": "Task Logger",
+  "description": "自动记录每次对话的任务日志到 agent_log.md",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

@@ -1,0 +1,1 @@
+{"id":"safe-delete-enforcer","name":"Safe Delete Enforcer","description":"拦截 rm 命令，强制使用安全删除","version":"1.0.0","configSchema":{"type":"object","additionalProperties":false,"properties":{}}}
