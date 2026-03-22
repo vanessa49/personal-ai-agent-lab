@@ -127,7 +127,7 @@ Agent 使用以下方案存储长期记忆：
 ### 1. 克隆并配置
 
 ```bash
-git clone https://github.com/<USERNAME>/personal-ai-agent-lab.git
+git clone https://github.com/vanessa49/personal-ai-agent-lab.git
 cd personal-ai-agent-lab
 
 # 复制并编辑配置文件
