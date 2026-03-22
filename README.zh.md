@@ -1,5 +1,7 @@
 # Personal AI Agent Lab（个人 AI Agent 实验室）
 
+[English](README.md) | [中文](README.zh.md)
+
 > 基于对话历史与长期记忆，构建自我演化个人 AI Agent 的实验性系统。
 
 **状态：研究原型 / 开发中**

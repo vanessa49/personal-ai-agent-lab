@@ -1,5 +1,7 @@
 # Personal AI Agent Lab
 
+[English](README.md) | [中文](README.zh.md)
+
 > Experimental system for building a self-improving personal AI agent based on conversation history and long-term memory.
 
 **Status: Research Prototype / Work in Progress**
