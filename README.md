@@ -44,6 +44,8 @@ This project uses a **split deployment** model:
 
 The GPU machine runs Ollama for inference. The NAS/server runs OpenClaw and Qdrant via Docker, and connects to Ollama over the local network.
 
+Note: Qdrant is currently an external database accessed via plugin API. OpenClaw's memory system is SQLite + sqlite-vec; hybrid search operates on SQLite vectors.
+
 ---
 
 ## Key Components
@@ -57,7 +59,7 @@ Extend the OpenClaw agent runtime with custom behaviors:
 | `tool-logger` | Records every tool call to a log file |
 | `task-logger` | Tracks agent task lifecycle |
 | `safe-delete-enforcer` | Prevents unsafe file deletion |
-| `qdrant-auto-checker` | Injects diagnostics when vector DB keywords appear |
+| `qdrant-auto-checker` | Queries Qdrant via plugin API (external DB, not integrated with `memory_search`) |
 | `training-sample-generator` | Converts conversations into training samples |
 | `memory-compressor` | Compresses long conversation context automatically |
 
@@ -107,8 +109,9 @@ The agent stores long-term memory using:
 
 - SQLite + sqlite-vec (vector extension)
 - Embedding model: `bge-m3` via Ollama
-- Hybrid search: vector (0.7) + text (0.3)
+- Hybrid search: vector (0.7, SQLite) + text (0.3)
 
+> Note: Vector search uses SQLite's internal vector store. Qdrant runs as a separate container and is queried manually via plugin — it is not yet integrated into the `memory_search` pipeline.
 ---
 
 ## Prerequisites
@@ -224,6 +227,8 @@ In progress:
 - Memory retrieval accuracy tuning
 - Automated fine-tuning pipeline
 - Agent activity dashboard
+
+> Note: Qdrant is used for experimental diagnostics and is not yet integrated into the memory retrieval pipeline.
 
 ---
 
