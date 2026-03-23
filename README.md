@@ -234,18 +234,15 @@ In progress:
 
 ## Why This Project Exists
 
-Most modern AI assistants are stateless. Every conversation starts from zero.
+Cloud AI models — GPT, Claude, Gemini — are trained on the output of billions of people. They represent collective intelligence at scale: optimized to be useful to everyone, shaped by aggregate data and company priorities.
 
-Human intelligence doesn't work this way — our identity, preferences, and thinking patterns are shaped by accumulated experience.
+That's genuinely powerful. But "useful to everyone" is a different thing from "shaped by you."
 
-This project explores what happens when you give a local LLM:
-- persistent memory of past conversations
-- a personal knowledge base
-- a self-improvement loop driven by real usage
+The question this project is exploring: what if a local, fine-tunable model could grow alongside a specific person? Not just remembering preferences on top — but having its actual reasoning patterns, tendencies, and ways of approaching problems gradually shaped by one individual's interactions over time.
 
-The hypothesis: a local model, trained on your own interactions, can gradually become something closer to a personalized cognitive assistant rather than a generic tool.
+The key difference is ownership of growth. Cloud models evolve based on what the company decides. A local model can evolve based on what *you* actually do and think about.
 
-Cloud-scale models reflect collective human intelligence. Local models have the potential to reflect *personal* intelligence.
+This is an early experiment in that direction. The architecture is in place; the self-improvement loop is still being assembled.
 
 ---
 
