@@ -6,6 +6,14 @@
 
 **Status: Research Prototype / Work in Progress**
 
+> Learn more about this project:
+
+- **Medium (Concept & Philosophy)** – [What if your AI could grow with you](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
+  Explores the ideas, design philosophy, and strategic thinking behind the personal AI system.  
+
+- **Dev.to (Implementation & Lessons)** – [Building a personal AI agent that grows with you](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
+  Shares technical implementation, challenges, and practical lessons learned during development.
+
 ---
 
 ## Project Idea
