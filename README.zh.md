@@ -6,6 +6,13 @@
 
 **状态：研究原型 / 开发中**
 
+> 深入了解本项目：
+
+- **Medium（理念与思考）** – [如果你的AI可以和你一起成长......](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
+  探讨个人化 AI 系统背后的设计理念、战略思路与思考逻辑。  
+
+- **Dev.to（实践与经验）** – [构建一个随你成长的个人 AI 代理](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
+  分享技术实现、开发过程中的挑战以及实践经验和踩坑记录。
 ---
 
 ## 项目理念
