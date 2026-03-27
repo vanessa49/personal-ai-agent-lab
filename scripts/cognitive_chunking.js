@@ -406,6 +406,48 @@ function buildCognitiveGraph(nodes) {
     }
   });
 
+  // ── 生成 iteration_final 边 ──────────────────────────────
+  // 检测修正链并添加从起点到终点的直接边
+  const refinedBy = {};
+  for (const edge of graph.edges) {
+    if (edge.relation === 'refines' || edge.relation === 'contrasts') {
+      refinedBy[edge.from] = edge.to;
+    }
+  }
+
+  // 追踪完整修正链
+  function getRefinementChain(nodeId) {
+    const chain = [nodeId];
+    const visited = new Set([nodeId]);
+    let cur = nodeId;
+    while (refinedBy[cur] && !visited.has(refinedBy[cur])) {
+      cur = refinedBy[cur];
+      visited.add(cur);
+      chain.push(cur);
+    }
+    return chain.length > 1 ? chain : null;
+  }
+
+  // 为每条修正链添加 iteration_final 边
+  const allTargets = new Set(Object.values(refinedBy));
+  for (const nodeId of Object.keys(refinedBy)) {
+    if (!allTargets.has(nodeId)) {  // 只处理链的起点
+      const chain = getRefinementChain(nodeId);
+      if (chain && chain.length > 1) {
+        const startId = chain[0];
+        const endId = chain[chain.length - 1];
+        graph.edges.push({
+          from: startId,
+          to: endId,
+          relation: 'iteration_final',
+          tags: ['refinement_chain'],
+          chain_length: chain.length,
+          chain_nodes: chain
+        });
+      }
+    }
+  }
+
   return graph;
 }
 
