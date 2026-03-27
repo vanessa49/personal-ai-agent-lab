@@ -93,12 +93,13 @@ Reusable skill definitions loaded into agent context:
 
 ### Scripts (`/scripts`)
 
-Utility scripts for the training pipeline:
+Two training pipelines are available:
 
+**Traditional pipeline** (turn-based segmentation):
 ```
 conversation logs
       ↓
-batch_process_conversations.js   # parse and chunk conversations
+batch_process_conversations.js   # parse and chunk by user/assistant turns
       ↓
 training-sample-generator        # generate candidate samples
       ↓
@@ -108,6 +109,52 @@ review_samples.js                # human review interface
       ↓
 fine-tuning dataset
 ```
+
+**Cognitive pipeline** (semantic segmentation):
+```
+conversation logs
+      ↓
+cognitive_chunking.js            # segment by cognitive events, not turn boundaries
+      ↓                          # builds graph: nodes + typed edges
+prepare_finetune.py              # weight samples by relation type + time decay
+      ↓
+run_finetune.py                  # kick off QLoRA training
+      ↓
+run_ab_test.py                   # compare baseline vs fine-tuned model
+```
+
+The cognitive pipeline segments conversations by semantic shift (topic change, correction marker, new idea) rather than user/assistant turn boundaries. Each segment becomes a node; edges between nodes carry a typed relation:
+
+| Relation | Meaning |
+|---|---|
+| `follows` | Sequential continuation (default) |
+| `derives` | Logical inference |
+| `refines` | Explicit correction or improvement |
+| `contrasts` | Perspective shift |
+| `responds` | Direct reply across roles |
+| `iteration_final` | Convergence after a correction chain |
+| `hypothesizes` | Conditional / hypothetical reasoning |
+| `restarts` | Thought reset or reconsideration |
+| `clarifies` | More precise restatement |
+| `speculates` | Uncertain inference or guess |
+
+Samples are weighted during fine-tuning preparation:
+
+```python
+weight_map = {
+    'iteration_final': 2.5,   # end of correction chain × depth bonus
+    'refines':         2.0,   # explicit correction
+    'contrasts':       2.0,   # perspective shift
+    'derives':         1.5,   # logical consequence
+    'clarifies':       1.5,   # precise restatement
+    'hypothesizes':    1.3,   # conditional reasoning
+    'restarts':        1.2,   # thought reset
+    'follows':         1.0,   # default
+}
+# Plus time decay: weight ×= e^(-age_in_days / 1460)
+```
+
+Use `discover_relation_patterns.js` to analyze the relation distribution in your own graph data, and `compare_chunking_methods.js` to compare the two pipelines on a single conversation file.
 
 ---
 

@@ -1,0 +1,60 @@
+### LLaMA-Factory QLoRA 微调配置
+### 目标模型：Qwen2.5-7B-Instruct（RTX 4060 8GB）
+### 注意：Ollama 的 qwen3.5:9b 是 GGUF 格式，不能直接用 LLaMA-Factory 微调。
+###       需要用 HuggingFace 格式的 Qwen2.5-7B-Instruct，微调完再转回 GGUF 给 Ollama 用。
+###       转换命令见 run_finetune.py 末尾说明。
+
+### ── 模型 ──────────────────────────────────────────────────
+# Ollama qwen2.5:7b → HuggingFace Qwen/Qwen2.5-7B-Instruct
+# Ollama qwen2.5:9b → HuggingFace Qwen/Qwen2.5-9B-Instruct
+# 注意：qwen3.5:9b 是全新架构（DeltaNet+多模态），需要 Unsloth 微调，不在本配置范围内
+model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+# 切换到 9B：
+# model_name_or_path: Qwen/Qwen2.5-9B-Instruct
+
+### ── 训练方法 ────────────────────────────────────────────────
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### ── LoRA 参数 ──────────────────────────────────────────────
+lora_rank: 16           # 7B 用 16；9B 在 8GB 显存下建议改为 8
+lora_alpha: 32          # 通常是 rank 的 2 倍
+lora_dropout: 0.05
+lora_target: q_proj,v_proj,k_proj,o_proj   # Qwen2.5 全注意力层
+
+### ── 量化（QLoRA）──────────────────────────────────────────
+quantization_bit: 4     # 4bit，8GB 显存可跑 7B
+
+### ── 数据集 ─────────────────────────────────────────────────
+dataset: personal_cognitive
+dataset_dir: C:/ai-training/finetune
+template: qwen           # Qwen 系列专用模板
+cutoff_len: 4096         # 支持多轮上下文（认知样本 input 较长）
+max_samples: 600
+
+### ── 样本权重 ───────────────────────────────────────────────
+# dataset.json 里的 weight 字段会被 LLaMA-Factory 自动读取
+# refines/contrasts/iteration_final 样本 weight=2.0，derives weight=1.5
+# 无需额外配置，LLaMA-Factory >= 0.8.0 原生支持 alpaca weight 字段
+
+### ── 训练超参 ────────────────────────────────────────────────
+per_device_train_batch_size: 1   # 4096 context 下 batch=2 可能 OOM，保守用 1
+gradient_accumulation_steps: 8   # 等效 batch_size = 8
+num_train_epochs: 3
+learning_rate: 2.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+fp16: true
+
+### ── 输出 ───────────────────────────────────────────────────
+output_dir: C:/ai-training/output/lora_v1
+logging_steps: 10
+save_steps: 100
+save_total_limit: 3
+
+### ── 评估 ───────────────────────────────────────────────────
+val_size: 0.05
+eval_strategy: steps        # LLaMA-Factory >= 0.9 用 eval_strategy（旧版用 evaluation_strategy）
+eval_steps: 100
+load_best_model_at_end: true

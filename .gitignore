@@ -8,10 +8,19 @@ __pycache__/
 *.sqlite
 *.log
 *.zip
+*.json.bak
 
-# Secrets
+# Training data and outputs
+training/
+memory/
+eval/
+
+# Secrets and personal config
 .env
 config/openclaw.json
+
+# Internal working documents
+RELATION_TYPES_UPDATE.md
 
 # OS
 .DS_Store

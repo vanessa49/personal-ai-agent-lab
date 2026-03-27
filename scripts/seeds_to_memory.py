@@ -80,91 +80,98 @@ def convert_conversation_to_markdown(conv, index):
     return '\n'.join(md_lines)
 
 def main():
-    seeds_dir = Path('/ai-agent/seeds')
+    seeds_dir = Path('/ai-agent/seeds/claude')
     memory_dir = Path('/ai-agent/memory/conversations')
-    
-    # 检查 seeds 目录是否存在
+
     if not seeds_dir.exists():
         print(f"Seeds directory not found: {seeds_dir}")
-        print(f"Please create directory and add conversation files")
+        print(f"Please create: mkdir -p /ai-agent/seeds/claude")
         return
-    
-    # 创建输出目录
+
     memory_dir.mkdir(parents=True, exist_ok=True)
+
+    # 遍历目录下所有 .json 文件
+    json_files = sorted(seeds_dir.glob('*.json'))
+    if not json_files:
+        print(f"No .json files found in {seeds_dir}")
+        return
+
+    print(f"Found {len(json_files)} file(s) in {seeds_dir}")
     print(f"Output directory: {memory_dir}")
-    
-    # 查找 conversations.json
-    conv_file = seeds_dir / 'conversations.json'
-    
-    if not conv_file.exists():
-        print(f"conversations.json not found: {conv_file}")
-        return
-    
-    print(f"Processing: {conv_file.name}")
-    
-    # 读取并解析 JSON
-    try:
-        with open(conv_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"JSON parse error: {e}")
-        return
-    except Exception as e:
-        print(f"File read error: {e}")
-        return
-    
-    # 提取对话列表
-    conversations = extract_conversations_from_claude_export(data)
-    
-    if not conversations:
-        print("No conversations found")
-        return
-    
-    print(f"Found {len(conversations)} conversations")
-    
-    # 转换每个对话
-    processed = 0
-    skipped = 0
-    
-    for idx, conv in enumerate(conversations, 1):
+    print()
+
+    # 用 uuid 去重，同一个对话多次导出只保留最新（消息数最多）
+    seen_uuids = {}  # uuid -> output_file（已写入的文件路径）
+
+    total_processed = 0
+    total_skipped = 0
+    total_updated = 0
+
+    for json_file in json_files:
+        print(f"Processing: {json_file.name}")
         try:
-            # 生成文件名
-            conv_uuid = conv.get('uuid', f'conv_{idx}')
-            conv_name = conv.get('name', f'Conversation {idx}')
-            
-            # 清理文件名（移除非法字符）
-            safe_name = "".join(c for c in conv_name if c.isalnum() or c in (' ', '-', '_')).strip()
-            if not safe_name:
-                safe_name = f"conversation_{idx}"
-            
-            output_file = memory_dir / f"{safe_name}_{conv_uuid[:8]}.md"
-            
-            # 转换为 Markdown
-            md_content = convert_conversation_to_markdown(conv, idx)
-            
-            # 保存文件
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(md_content)
-            
-            print(f"   [{idx}/{len(conversations)}] {output_file.name}")
-            processed += 1
-            
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
         except Exception as e:
-            print(f"   [{idx}/{len(conversations)}] Failed: {e}")
-            skipped += 1
-    
-    # 输出统计
-    print("")
+            print(f"  Failed to read: {e}")
+            continue
+
+        conversations = extract_conversations_from_claude_export(data)
+        if not conversations:
+            print(f"  No conversations found")
+            continue
+
+        print(f"  Found {len(conversations)} conversations")
+
+        for idx, conv in enumerate(conversations, 1):
+            try:
+                conv_uuid = conv.get('uuid', f'conv_{idx}')
+                conv_name = conv.get('name', f'Conversation {idx}')
+                msg_count = len(conv.get('chat_messages', []))
+
+                safe_name = "".join(
+                    c for c in conv_name if c.isalnum() or c in (' ', '-', '_')
+                ).strip() or f"conversation_{idx}"
+
+                output_file = memory_dir / f"{safe_name}_{conv_uuid[:8]}.md"
+
+                # 去重：同 uuid 已存在且消息数没增加则跳过
+                if conv_uuid in seen_uuids:
+                    prev_count = seen_uuids[conv_uuid]['msg_count']
+                    if msg_count <= prev_count:
+                        total_skipped += 1
+                        continue
+                    # 消息数增加，删旧文件
+                    old_file = seen_uuids[conv_uuid]['path']
+                    if old_file.exists():
+                        old_file.unlink()
+                    total_updated += 1
+                else:
+                    total_processed += 1
+
+                md_content = convert_conversation_to_markdown(conv, idx)
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(md_content)
+
+                seen_uuids[conv_uuid] = {'path': output_file, 'msg_count': msg_count}
+
+            except Exception as e:
+                print(f"  [{idx}] Failed: {e}")
+                total_skipped += 1
+
+        print(f"  Done")
+
+    print()
     print("=" * 60)
     print(f"Processing complete")
-    print(f"   - Success: {processed} conversations")
-    print(f"   - Skipped: {skipped} conversations")
-    print(f"   - Output: {memory_dir}")
-    print("")
+    print(f"   - New:     {total_processed} conversations")
+    print(f"   - Updated: {total_updated} conversations (more messages)")
+    print(f"   - Skipped: {total_skipped} conversations (duplicate)")
+    print(f"   - Output:  {memory_dir}")
+    print()
     print("Next steps:")
     print("   1. Wait for OpenClaw auto-indexing (1-2 minutes)")
     print("   2. Test with memory_search tool")
-    print("   3. Example: memory_search: query='conversation'")
     print("=" * 60)
 
 if __name__ == '__main__':
