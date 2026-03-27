@@ -44,24 +44,30 @@ function task1_graphStructure(graphs) {
 
   let totalNodes = 0;
   let totalEdges = 0;
+  let totalIterationFinal = 0;
   const violations = [];
 
   for (const g of graphs) {
     const nodeCount = (g.nodes || []).length;
     const edgeCount = (g.edges || []).length;
+    const iterationFinalCount = (g.edges || []).filter(e => e.relation === 'iteration_final').length;
     
     totalNodes += nodeCount;
     totalEdges += edgeCount;
+    totalIterationFinal += iterationFinalCount;
 
-    // 验证：edges ≈ nodes - 1（允许 ±1 误差，因为可能有孤立节点）
-    const expected = nodeCount - 1;
+    // 新公式：edges = (nodes - 1) + iteration_final
+    // 因为：基础链式边 + 修正链的收敛边
+    const expected = (nodeCount - 1) + iterationFinalCount;
     const diff = Math.abs(edgeCount - expected);
     
+    // 允许小误差（可能有孤立节点或特殊结构）
     if (diff > 1) {
       violations.push({
         file: g.file,
         nodes: nodeCount,
         edges: edgeCount,
+        iterationFinal: iterationFinalCount,
         expected,
         diff
       });
@@ -71,14 +77,19 @@ function task1_graphStructure(graphs) {
   console.log(`总对话数: ${graphs.length}`);
   console.log(`总节点数: ${totalNodes}`);
   console.log(`总边数: ${totalEdges}`);
-  console.log(`预期边数: ${totalNodes - graphs.length} (nodes - conversations)`);
-  console.log(`实际差异: ${totalEdges - (totalNodes - graphs.length)}`);
+  console.log(`iteration_final 边数: ${totalIterationFinal}`);
+  console.log('');
+  console.log(`预期边数: ${totalNodes - graphs.length + totalIterationFinal}`);
+  console.log(`  = nodes - conversations + iteration_final`);
+  console.log(`  = ${totalNodes} - ${graphs.length} + ${totalIterationFinal}`);
+  console.log(`实际边数: ${totalEdges}`);
+  console.log(`差异: ${totalEdges - (totalNodes - graphs.length + totalIterationFinal)}`);
   console.log('');
 
   if (violations.length > 0) {
     console.log(`⚠️  发现 ${violations.length} 个图谱结构异常:`);
     violations.slice(0, 10).forEach(v => {
-      console.log(`  ${v.file}: nodes=${v.nodes}, edges=${v.edges}, expected=${v.expected}, diff=${v.diff}`);
+      console.log(`  ${v.file}: nodes=${v.nodes}, edges=${v.edges}, iteration_final=${v.iterationFinal}, expected=${v.expected}, diff=${v.diff}`);
     });
     if (violations.length > 10) {
       console.log(`  ... 还有 ${violations.length - 10} 个`);
@@ -87,7 +98,7 @@ function task1_graphStructure(graphs) {
     console.log('✅ 所有图谱结构正常');
   }
 
-  return { totalNodes, totalEdges, conversations: graphs.length, violations };
+  return { totalNodes, totalEdges, totalIterationFinal, conversations: graphs.length, violations };
 }
 
 // ============ Task 2: Edge Accounting ============
@@ -202,16 +213,21 @@ function task4_refinementChains(graphs) {
   console.log('');
 
   let refinesCount = 0;
+  let contrastsCount = 0;
   let iterationFinalCount = 0;
   const chainLengths = {};
+  let duplicateIterationFinal = 0;
+  let invalidIterationFinal = 0;
 
   for (const g of graphs) {
+    // 统计边类型
     for (const edge of (g.edges || [])) {
       if (edge.relation === 'refines') refinesCount++;
+      if (edge.relation === 'contrasts') contrastsCount++;
       if (edge.relation === 'iteration_final') iterationFinalCount++;
     }
 
-    // 追踪修正链长度
+    // 验证 iteration_final 边的正确性
     const nodeMap = {};
     (g.nodes || []).forEach(n => nodeMap[n.id] = n);
 
@@ -222,9 +238,37 @@ function task4_refinementChains(graphs) {
       }
     }
 
-    // 计算链长度
+    // 检查 iteration_final 边
+    const iterationFinalEdges = (g.edges || []).filter(e => e.relation === 'iteration_final');
+    const iterationFinalSet = new Set();
+    
+    for (const edge of iterationFinalEdges) {
+      const key = `${edge.from}->${edge.to}`;
+      
+      // 检查重复
+      if (iterationFinalSet.has(key)) {
+        duplicateIterationFinal++;
+      }
+      iterationFinalSet.add(key);
+
+      // 验证：from 应该是修正链的起点，to 应该是终点
+      // 起点：不应该被其他节点修正
+      // 终点：不应该修正其他节点
+      const fromIsStart = !Object.values(refinedBy).includes(edge.from);
+      const toIsEnd = !refinedBy[edge.to];
+      
+      if (!fromIsStart || !toIsEnd) {
+        invalidIterationFinal++;
+      }
+    }
+
+    // 计算修正链长度
     const visited = new Set();
+    const allTargets = new Set(Object.values(refinedBy));
+    
     for (const startId of Object.keys(refinedBy)) {
+      // 只处理链的起点（不被其他节点修正的节点）
+      if (allTargets.has(startId)) continue;
       if (visited.has(startId)) continue;
 
       let length = 1;
@@ -246,6 +290,7 @@ function task4_refinementChains(graphs) {
   }
 
   console.log(`refines 边数: ${refinesCount}`);
+  console.log(`contrasts 边数: ${contrastsCount}`);
   console.log(`iteration_final 边数: ${iterationFinalCount}`);
   console.log(`修正链数量: ${iterationFinalCount}`);
   console.log('');
@@ -257,14 +302,38 @@ function task4_refinementChains(graphs) {
       console.log(`  长度 ${len}: ${count} 条`);
     });
 
+  const totalChainEdges = Object.entries(chainLengths).reduce((sum, [len, count]) => {
+    return sum + (parseInt(len) - 1) * count;  // 每条链的边数 = 长度 - 1
+  }, 0);
+  const avgChainLength = Object.entries(chainLengths).reduce((sum, [len, count]) => {
+    return sum + parseInt(len) * count;
+  }, 0) / Math.max(1, Object.values(chainLengths).reduce((a, b) => a + b, 0));
+  
+  console.log(`平均链长: ${avgChainLength.toFixed(2)}`);
   console.log('');
-  if (iterationFinalCount <= refinesCount) {
-    console.log('✅ iteration_final <= refines (符合预期)');
+
+  // 验证结果
+  console.log('验证结果:');
+  console.log(`  iteration_final <= refines: ${iterationFinalCount} <= ${refinesCount} ${iterationFinalCount <= refinesCount ? '✅' : '⚠️'}`);
+  console.log(`  重复的 iteration_final 边: ${duplicateIterationFinal} ${duplicateIterationFinal === 0 ? '✅' : '⚠️'}`);
+  console.log(`  无效的 iteration_final 边: ${invalidIterationFinal} ${invalidIterationFinal === 0 ? '✅' : '⚠️'}`);
+  console.log('');
+
+  if (iterationFinalCount <= refinesCount && duplicateIterationFinal === 0 && invalidIterationFinal === 0) {
+    console.log('✅ iteration_final 边生成正确');
   } else {
-    console.log('⚠️  iteration_final > refines (异常)');
+    console.log('⚠️  iteration_final 边存在问题');
   }
 
-  return { refinesCount, iterationFinalCount, chainLengths };
+  return { 
+    refinesCount, 
+    contrastsCount,
+    iterationFinalCount, 
+    chainLengths,
+    duplicateIterationFinal,
+    invalidIterationFinal,
+    avgChainLength
+  };
 }
 
 // ============ Task 5: Timestamp Integrity ============
@@ -433,12 +502,12 @@ function task7_consistencyReport(results) {
 
   console.log('一致性检查:');
   
-  // 检查 1: edges ≈ nodes - conversations
-  const expectedEdges = task1.totalNodes - task1.conversations;
+  // 检查 1: edges = nodes - conversations + iteration_final
+  const expectedEdges = task1.totalNodes - task1.conversations + task1.totalIterationFinal;
   const edgeDiff = Math.abs(task1.totalEdges - expectedEdges);
-  const edgeCheck = edgeDiff <= task1.conversations * 0.01; // 允许 1% 误差
-  console.log(`  edges ≈ nodes - conversations:`);
-  console.log(`    预期: ${expectedEdges}`);
+  const edgeCheck = edgeDiff === 0;
+  console.log(`  edges = nodes - conversations + iteration_final:`);
+  console.log(`    预期: ${expectedEdges} (${task1.totalNodes} - ${task1.conversations} + ${task1.totalIterationFinal})`);
   console.log(`    实际: ${task1.totalEdges}`);
   console.log(`    差异: ${edgeDiff}`);
   console.log(`    ${edgeCheck ? '✅ 通过' : '⚠️  异常'}`);
