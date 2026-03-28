@@ -6,13 +6,26 @@
 
 **Status: Research Prototype / Work in Progress**
 
-> Learn more about this project:
+## Learn more about this project:
 
-- **Medium (Concept & Philosophy)** – [What if your AI could grow with you](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
-  Explores the ideas, design philosophy, and strategic thinking behind the personal AI system.  
+This project is accompanied by a series of articles exploring the ideas,
+design philosophy, and technical implementation behind a personal AI system.
 
-- **Dev.to (Implementation & Lessons)** – [Building a personal AI agent that grows with you](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
-  Shares technical implementation, challenges, and practical lessons learned during development.
+### 1. Concept
+
+- **Medium** – [What if your AI could grow with you](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
+  Introduces the core idea of personal AI and the concept of **ownership of growth**.
+
+- **Dev.to** – [Building a personal AI agent that grows with you](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
+  Early implementation notes and lessons from building the system.
+
+### 2. Thought Trajectories
+
+- **Medium** – [Personal AI isn't about answers — it's about thought trajectories](https://medium.com/design-bootcamp/personal-ai-isnt-about-answers-it-s-about-thought-trajectories-d1afd1d4b87b)
+  Explores the philosophical argument: AI conversations should capture **thinking trajectories**, not isolated answers.
+
+- **Dev.to** – [Personal AI isn't Q&A, it's iteration](https://dev.to/vanessa49/personal-ai-isnt-qa-its-iteration-3496)  
+  Explores the philosophical argument: AI conversations should capture **thinking trajectories**, not isolated answers.
 
 ---
 

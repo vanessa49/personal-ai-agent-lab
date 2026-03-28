@@ -6,13 +6,26 @@
 
 **状态：研究原型 / 开发中**
 
-> 深入了解本项目：
+## 深入了解本项目：
 
-- **Medium（理念与思考）** – [如果你的AI可以和你一起成长......](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
-  探讨个人化 AI 系统背后的设计理念、战略思路与思考逻辑。  
+本项目不仅包含代码实现，也配套记录了关于 **个人 AI 系统** 的一系列思考与实践。
 
-- **Dev.to（实践与经验）** – [构建一个随你成长的个人 AI 代理](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
-  分享技术实现、开发过程中的挑战以及实践经验和踩坑记录。
+### 核心理念
+
+- **Medium（理念与思考）** – [如果你的 AI 可以和你一起成长](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
+  介绍个人 AI 的核心设想：AI 不只是工具，而是能够随着个人认知一起演化的系统。
+
+- **Dev.to（实现与经验）** – [构建一个随你成长的个人 AI 代理](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
+  记录系统的初步实现过程、技术挑战以及开发中的实践经验。
+
+### 思维轨迹（Thought Trajectories）
+
+- **Medium（方法与哲学）** – [Personal AI isn't about answers — it's about thought trajectories](https://medium.com/design-bootcamp/personal-ai-isnt-about-answers-it-s-about-thought-trajectories-d1afd1d4b87b)  
+  讨论为什么 AI 交互不应该只是问答，而应该记录和理解 **思考的演化轨迹**。
+
+- **Dev.to（技术实现）** – [Personal AI isn't Q&A, it's iteration](https://dev.to/vanessa49/personal-ai-isnt-qa-its-iteration-3496)  
+  介绍具体技术方案：数据结构设计、edge 类型，以及对 1122 次对话数据的分析。
+
 ---
 
 ## 项目理念
