@@ -23,12 +23,17 @@ const path = require('path');
 function detectTopicShift(text, prevText) {
   if (!prevText) return false;
   
-  // 提取关键词（简单实现：长度>3的词）
+  // 提取关键词：词 + 单个中文字符的 n-gram 方案
   const extractKeywords = (t) => {
-    return t.toLowerCase()
-      .split(/[\s,，。.!！?？;；]+/)
-      .filter(w => w.length > 3)
-      .slice(0, 10);
+    const words = t
+      .toLowerCase()
+      .split(/[\s,，。.!！?？;；、]+/)
+      .filter(w => w.length > 1);
+    
+    // 提取单个中文字符
+    const chars = [...t].filter(c => /[\u4e00-\u9fa5]/.test(c));
+    
+    return [...words, ...chars].slice(0, 12);
   };
   
   const currKeywords = extractKeywords(text);
@@ -36,7 +41,7 @@ function detectTopicShift(text, prevText) {
   
   // 关键词重叠度
   const overlap = currKeywords.filter(k => prevKeywords.includes(k)).length;
-  const overlapRatio = overlap / Math.max(currKeywords.length, 1);
+  const overlapRatio = overlap / Math.max(prevKeywords.length, 1);
   
   // 重叠度 < 30% 认为是话题转移
   return overlapRatio < 0.3;
@@ -70,8 +75,8 @@ function detectReasoningStep(text) {
  */
 function detectCorrection(text) {
   const correctionMarkers = [
-    // 转折
-    '但是', '但', '然而', '不过', '其实', '实际上',
+    // 转折（精选：但是、然而、不过）
+    '但是', '然而', '不过', '其实', '实际上',
     'but', 'however', 'actually', 'in fact',
     
     // 修正
@@ -91,67 +96,12 @@ function detectCorrection(text) {
  */
 function detectNewIdea(text) {
   const ideaMarkers = [
-    '我突然意识到', '我想到', '有个想法', '一个思路',
-    '可以这样','我突然想到',
-    'I realize', 'I think', 'an idea', 'could be'
+    '我突然想到', '我突然意识到', '有个想法', '一个思路',
+    '可以这样', '或许', '也许', '如果',
+    'what if', 'maybe', 'perhaps'
   ];
   
   return ideaMarkers.some(m => text.includes(m));
-}
-
-/**
- * 检测假设推理 (Hypothesis)
- * 例如：如果A，那么B
- */
-function detectHypothesis(text) {
-  const hypothesisMarkers = [
-    '如果', '假设', '假如', '倘若', '要是',
-    'if', 'suppose', 'assuming', 'what if', 'provided that'
-  ];
-  
-  return hypothesisMarkers.some(m => text.includes(m));
-}
-
-/**
- * 检测思路重启 (Restart)
- * 例如：重新考虑、再想想
- */
-function detectRestart(text) {
-  const restartMarkers = [
-    '重新', '再', '重', '从头', '重来',
-    '重新思考', '再想想', '再看看', '重新考虑',
-    'restart', 'again', 'reconsider', 'start over', 're-'
-  ];
-  
-  return restartMarkers.some(m => text.includes(m));
-}
-
-/**
- * 检测澄清说明 (Clarification)
- * 例如：更准确地说、换句话说
- */
-function detectClarification(text) {
-  const clarificationMarkers = [
-    '更准确', '更确切', '准确地说', '确切地说',
-    '换句话说', '也就是', '具体来说', '详细说',
-    'more precisely', 'more accurately', 'to be clear',
-    'in other words', 'specifically', 'to clarify'
-  ];
-  
-  return clarificationMarkers.some(m => text.includes(m));
-}
-
-/**
- * 检测推测 (Speculation)
- * 例如：或许、也许、可能
- */
-function detectSpeculation(text) {
-  const speculationMarkers = [
-    '或许', '也许', '可能', '大概', '估计', '应该',
-    'maybe', 'perhaps', 'possibly', 'probably', 'might'
-  ];
-  
-  return speculationMarkers.some(m => text.includes(m));
 }
 
 /**
@@ -184,6 +134,38 @@ function isCognitiveEvent(text, prevText) {
   );
 }
 
+// ============ 文本清洗 ============
+
+/**
+ * 清洗文本：删除 cite/entity/UI 标记，清理多余空格和换行
+ */
+function cleanText(text) {
+  if (!text) return '';
+  return text
+    // 删除 cite 标记（含内容）
+    .replace(/<cite[^>]*>.*?<\/cite>/gs, '')
+    // 删除 entity 标记（含内容）
+    .replace(/<entity[^>]*>.*?<\/entity>/gs, '')
+    // 删除 contentReference 标记（oaicite 等）
+    .replace(/:contentReference\[oaicite:\d+\]\{index=\d+\}/g, '')
+    // 删除其它 HTML/UI 标记
+    .replace(/<[^>]+>/g, '')
+    // 清理多余空格
+    .replace(/[ \t]+/g, ' ')
+    // 合并多余换行
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * 截断文本到最大字符数
+ */
+function truncateText(text, maxChars) {
+  if (!text) return '';
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars);
+}
+
 // ============ 句子级切分 ============
 
 /**
@@ -197,25 +179,37 @@ function splitIntoSentences(text) {
   
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    current += char;
     
-    // 检测代码块
+    // 检测代码块（```）
     if (text.substr(i, 3) === '```') {
       inCodeBlock = !inCodeBlock;
+      current += '```';
       i += 2;
-      current += text.substr(i - 1, 2);
       continue;
     }
+    
+    current += char;
     
     // 在代码块内不切分
     if (inCodeBlock) continue;
     
-    // 句子结束标志
-    const isEnd = ['。', '.', '！', '!', '？', '?', '\n\n'].some(end => {
-      return text.substr(i, end.length) === end;
-    });
+    // 数字小数点不切分（如 2.5、3.14）
+    if (char === '.' && i > 0 && i < text.length - 1 &&
+        /\d/.test(text[i - 1]) && /\d/.test(text[i + 1])) {
+      continue;
+    }
     
-    if (isEnd && current.trim().length > 10) {
+    // 句子结束标志（单字符判断）
+    const isEnd =
+      char === '。' ||
+      char === '.' ||
+      char === '！' ||
+      char === '!' ||
+      char === '？' ||
+      char === '?' ||
+      (char === '\n' && text[i + 1] === '\n');
+    
+    if (isEnd && current.trim().length > 20 && !current.trim().startsWith('#')) {
       sentences.push(current.trim());
       current = '';
     }
@@ -227,6 +221,9 @@ function splitIntoSentences(text) {
 
 /**
  * 将句子合并成认知节点
+ * 规则：
+ *   1. 认知事件触发切分
+ *   2. 节点内容 < 20 chars 时合并到下一节点（低质量信号过滤）
  */
 function mergeSentencesIntoNodes(sentences) {
   if (sentences.length === 0) return [];
@@ -238,27 +235,43 @@ function mergeSentencesIntoNodes(sentences) {
     const sentence = sentences[i];
     const prevContent = currentNode.content;
     
-    // 判断是否应该切分
     if (isCognitiveEvent(sentence, prevContent)) {
-      // 保存当前节点
-      if (currentNode.content.trim()) {
+      // 短节点不独立，合并到下一个
+      if (currentNode.content.trim().length >= 20) {
         nodes.push(currentNode);
+        currentNode = { content: sentence, sentences: [sentence] };
+      } else {
+        currentNode.content += '\n' + sentence;
+        currentNode.sentences.push(sentence);
       }
-      // 开始新节点
-      currentNode = { content: sentence, sentences: [sentence] };
     } else {
-      // 合并到当前节点
       currentNode.content += '\n' + sentence;
       currentNode.sentences.push(sentence);
     }
   }
   
-  // 保存最后一个节点
-  if (currentNode.content.trim()) {
+  if (currentNode.content.trim() && currentNode.content.length > 30) {
     nodes.push(currentNode);
   }
   
   return nodes;
+}
+
+/**
+ * 合并连续同角色节点（避免 assistant/assistant/assistant 连续出现）
+ */
+function mergeConsecutiveSameRole(nodes) {
+  if (nodes.length === 0) return [];
+  const merged = [{ ...nodes[0] }];
+  for (let i = 1; i < nodes.length; i++) {
+    const prev = merged[merged.length - 1];
+    if (nodes[i].role === prev.role) {
+      prev.content += '\n\n' + nodes[i].content;
+    } else {
+      merged.push({ ...nodes[i] });
+    }
+  }
+  return merged;
 }
 
 // ============ 对话级切分 ============
@@ -317,7 +330,7 @@ function chunkConversationIntoCognitiveNodes(turns, conversationTime) {
   const nodeTime = conversationTime || new Date().toISOString();
 
   for (const turn of turns) {
-    const text = turn.content.trim();
+    const text = cleanText(turn.content.trim());
     if (!text) continue;
 
     const sentences = splitIntoSentences(text);
@@ -325,13 +338,14 @@ function chunkConversationIntoCognitiveNodes(turns, conversationTime) {
 
     nodes.forEach(node => {
       node.role = turn.role;
-      node.timestamp = nodeTime;  // 使用对话原始时间，而不是处理时间
+      node.timestamp = nodeTime;
     });
 
     allNodes.push(...nodes);
   }
 
-  return allNodes;
+  // 合并连续同角色节点，避免 assistant/assistant/assistant 连续出现
+  return mergeConsecutiveSameRole(allNodes);
 }
 
 // ============ 认知图谱构建 ============
@@ -350,23 +364,10 @@ function buildCognitiveGraph(nodes) {
     edges: []
   };
 
-  // 内置关系枚举（用于训练 instruction 映射）
-  const BUILTIN_RELATIONS = new Set([
-    'follows',      // 顺序跟随（默认）
-    'derives',      // 推理推进
-    'refines',      // 观点修正
-    'contrasts',    // 视角对比
-    'responds',     // 角色应答
-    'hypothesizes', // 假设推理
-    'restarts',     // 思路重启
-    'clarifies',    // 澄清说明
-    'speculates'    // 推测猜想
-  ]);
-
   nodes.forEach((node, i) => {
     graph.nodes.push({
       id: `node_${i}`,
-      content: node.content,
+      content: truncateText(node.content, 600),
       role: node.role,
       timestamp: node.timestamp,
       length: node.content.length
@@ -377,22 +378,16 @@ function buildCognitiveGraph(nodes) {
 
       let relationType = 'follows';
 
-      // 优先级从高到低判断（更具体的关系优先）
-      if (detectReasoningStep(node.content)) {
-        relationType = 'derives';
-      } else if (detectCorrection(node.content)) {
+      if (detectCorrection(node.content)) {
         relationType = 'refines';
-      } else if (detectClarification(node.content)) {
-        relationType = 'clarifies';
-      } else if (detectRestart(node.content)) {
-        relationType = 'restarts';
-      } else if (detectHypothesis(node.content)) {
-        relationType = 'hypothesizes';
-      } else if (detectSpeculation(node.content)) {
-        relationType = 'speculates';
-      } else if (detectPerspectiveShift(node.content)) {
+      }
+      else if (detectPerspectiveShift(node.content)) {
         relationType = 'contrasts';
-      } else if (node.role !== prevNode.role) {
+      }
+      else if (detectReasoningStep(node.content)) {
+        relationType = 'derives';
+      }
+      else if (node.role !== prevNode.role) {
         relationType = 'responds';
       }
 
@@ -405,48 +400,6 @@ function buildCognitiveGraph(nodes) {
       });
     }
   });
-
-  // ── 生成 iteration_final 边 ──────────────────────────────
-  // 检测修正链并添加从起点到终点的直接边
-  const refinedBy = {};
-  for (const edge of graph.edges) {
-    if (edge.relation === 'refines' || edge.relation === 'contrasts') {
-      refinedBy[edge.from] = edge.to;
-    }
-  }
-
-  // 追踪完整修正链
-  function getRefinementChain(nodeId) {
-    const chain = [nodeId];
-    const visited = new Set([nodeId]);
-    let cur = nodeId;
-    while (refinedBy[cur] && !visited.has(refinedBy[cur])) {
-      cur = refinedBy[cur];
-      visited.add(cur);
-      chain.push(cur);
-    }
-    return chain.length > 1 ? chain : null;
-  }
-
-  // 为每条修正链添加 iteration_final 边
-  const allTargets = new Set(Object.values(refinedBy));
-  for (const nodeId of Object.keys(refinedBy)) {
-    if (!allTargets.has(nodeId)) {  // 只处理链的起点
-      const chain = getRefinementChain(nodeId);
-      if (chain && chain.length > 1) {
-        const startId = chain[0];
-        const endId = chain[chain.length - 1];
-        graph.edges.push({
-          from: startId,
-          to: endId,
-          relation: 'iteration_final',
-          tags: ['refinement_chain'],
-          chain_length: chain.length,
-          chain_nodes: chain
-        });
-      }
-    }
-  }
 
   return graph;
 }
@@ -461,7 +414,7 @@ function buildCognitiveGraph(nodes) {
  *   - 标记被后续 refines/contrasts 修正过的节点（is_refined）
  *   - 额外生成"迭代完整样本"：原始节点 → 最终修正版本
  */
-function generateTrainingSamples(graph, windowSize = 3) {
+function generateTrainingSamples(graph, windowSize = 5) {
   const samples = [];
 
   // ── 预处理：找出哪些节点被后续修正了 ──────────────────────
@@ -502,10 +455,15 @@ function generateTrainingSamples(graph, windowSize = 3) {
   }
 
   // ── 主循环：滑动窗口样本 ──────────────────────────────────
+  // 关键修改：只在 assistant 节点生成样本，避免 role collapse
   for (let i = 0; i < graph.nodes.length - 1; i++) {
-    const contextStart = Math.max(0, i - windowSize + 1);
-    const contextNodes = graph.nodes.slice(contextStart, i + 1);
     const nextNode = graph.nodes[i + 1];
+    
+    // 只有下一个节点是 assistant 时才生成样本
+    if (nextNode.role !== 'assistant') continue;
+    
+    const contextStart = Math.max(0, i - Math.max(windowSize, 2) + 1);
+    const contextNodes = graph.nodes.slice(contextStart, i + 1);
 
     const stateT = contextNodes.map(n => ({ role: n.role, content: n.content }));
     const stateTplus1 = { role: nextNode.role, content: nextNode.content };
@@ -534,6 +492,9 @@ function generateTrainingSamples(graph, windowSize = 3) {
   const nodeMap = Object.fromEntries(graph.nodes.map(n => [n.id, n]));
 
   for (const [rootId, chain] of Object.entries(chainCache)) {
+    // 只有修正链 ≥ 3 个节点（A → B → C）才算完整迭代
+    if (chain.length < 3) continue;
+
     const finalId = chain[chain.length - 1];
     const rootIdx = graph.nodes.findIndex(n => n.id === rootId);
     if (rootIdx < 0) continue;
@@ -573,10 +534,23 @@ function generateTrainingSamples(graph, windowSize = 3) {
  * 转换为 Ollama 训练格式
  */
 function convertToOllamaFormat(sample) {
-  const context = sample._iteration_input_override
-    || sample.state_t.map(s => `[${s.role}] ${s.content}`).join('\n\n');
+  const contextBase = cleanText(
+    sample._iteration_input_override
+    || sample.state_t.map(s => `[${s.role}] ${s.content}`).join('\n\n')
+  );
 
-  const target = sample.state_t_plus_1.content;
+  const cognitiveState = [
+    `<relation>${sample.relation}</relation>`,
+    `<iteration_depth>${sample.iteration_depth}</iteration_depth>`,
+    `<refined>${sample.is_refined}</refined>`
+  ].join('\n');
+
+  const context = truncateText(
+    `${contextBase}\n\n<cognitive_state>\n${cognitiveState}\n</cognitive_state>`,
+    1200
+  );
+
+  const target = cleanText(sample.state_t_plus_1.content);
 
   const relationInstruction = {
     'follows':        '根据上文，自然延续这个思路：',
@@ -585,16 +559,12 @@ function convertToOllamaFormat(sample) {
     'contrasts':      '从不同角度重新审视上文的判断：',
     'responds':       '针对上文的问题或想法，给出回应：',
     'iteration_final':'综合上文的讨论过程，给出最终修正后的判断：',
-    'hypothesizes':   '基于上文，提出假设性推理：',
-    'restarts':       '重新审视上文，从新的角度出发：',
-    'clarifies':      '对上文的表述进行更精确的说明：',
-    'speculates':     '基于上文，给出推测性判断：',
   }[sample.relation] || '根据上文，继续推进：';
 
   return {
     instruction: relationInstruction,
     input: context,
-    output: target,
+    output: truncateText(target, 400),
     reasoning: `认知推进 (${sample.relation})`,
     is_refined: sample.is_refined || false,
     iteration_depth: sample.iteration_depth || 0,
@@ -620,6 +590,8 @@ async function processCognitiveChunking(conversationsDir, outputDir, dryRun = fa
   
   let totalNodes = 0;
   let totalSamples = 0;
+  let totalInputLength = 0;
+  let totalOutputLength = 0;
   const relationStats = {};
   
   for (const file of files) {
@@ -652,7 +624,7 @@ async function processCognitiveChunking(conversationsDir, outputDir, dryRun = fa
       console.log(`  训练样本: ${samples.length}`);
       totalSamples += samples.length;
       
-      // 统计关系类型
+      // 统计关系类型和长度
       samples.forEach(s => {
         relationStats[s.relation] = (relationStats[s.relation] || 0) + 1;
       });
@@ -668,6 +640,8 @@ async function processCognitiveChunking(conversationsDir, outputDir, dryRun = fa
         const samplesPath = path.join(outputDir, 'cognitive_samples.jsonl');
         samples.forEach(sample => {
           const ollamaFormat = convertToOllamaFormat(sample);
+          totalInputLength += ollamaFormat.input.length;
+          totalOutputLength += ollamaFormat.output.length;
           appendJsonl(samplesPath, ollamaFormat);
         });
       }
@@ -696,6 +670,10 @@ async function processCognitiveChunking(conversationsDir, outputDir, dryRun = fa
     console.log(`\n输出目录: ${outputDir}`);
     console.log(`  - 认知图谱: ${outputDir}/graphs/*.json`);
     console.log(`  - 训练样本: ${outputDir}/cognitive_samples.jsonl`);
+    if (totalSamples > 0) {
+      console.log(`\n平均 input 长度: ${(totalInputLength / totalSamples).toFixed(0)}`);
+      console.log(`平均 output 长度: ${(totalOutputLength / totalSamples).toFixed(0)}`);
+    }
   }
 }
 

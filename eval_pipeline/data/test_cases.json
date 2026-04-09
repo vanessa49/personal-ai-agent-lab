@@ -1,0 +1,155 @@
+{
+  "style": [
+    {
+      "id": "s1",
+      "input": "I'm deciding between LoRA and full fine-tuning for a 7B model on a single GPU. How should I choose?",
+      "note": "开放性技术选择题，看回答是探索式还是直接给答案"
+    },
+    {
+      "id": "s2",
+      "input": "How would you approach building a personal AI system that learns from your own conversations?",
+      "note": "项目核心话题，看是否展示迭代思维而非单一结论"
+    },
+    {
+      "id": "s3",
+      "input": "What's the best way to structure training data for fine-tuning?",
+      "note": "有多种有效答案，看是否探索而非直接断言"
+    },
+    {
+      "id": "s4",
+      "input": "I want to make my AI agent remember important conversations. Where do I start?",
+      "note": "开放设计问题，优质回答应拆解假设再给建议"
+    },
+    {
+      "id": "s5",
+      "input": "Should I use vector search or keyword search for my agent's memory system?",
+      "note": "技术权衡题，好的回答应该先问具体需求再给建议"
+    },
+    {
+      "id": "s6",
+      "input": "My AI agent keeps giving generic answers. How do I make it more personalized?",
+      "note": "诊断式问题，应展示排查思路而非列举方案"
+    },
+    {
+      "id": "s7",
+      "input": "Is it better to have many small plugins or one large agent for a personal AI system?",
+      "note": "架构权衡，应体现情境依赖性思维"
+    },
+    {
+      "id": "s8",
+      "input": "How do you evaluate whether a fine-tuned model is actually better?",
+      "note": "元认知问题，应质疑'更好'的定义而非直接给指标"
+    },
+    {
+      "id": "s9",
+      "input": "What does it mean for an AI to understand context?",
+      "note": "概念性问题，好答案应先解构概念再讨论"
+    },
+    {
+      "id": "s10",
+      "input": "I have 1000 conversations. How should I turn them into training data?",
+      "note": "核心pipeline问题，看是否主动问数据质量/类型"
+    }
+  ],
+
+  "trajectory": [
+    {
+      "id": "t1",
+      "context": [
+        {"role": "user", "content": "I think user-to-assistant turn segmentation is the right way to structure training data."},
+        {"role": "assistant", "content": "Yes, that's the standard approach. Each user message paired with the assistant reply creates a clean training sample."}
+      ],
+      "input": "But I noticed some of my conversations don't look like Q&A at all. They iterate.",
+      "note": "应能识别这是修正信号，引导向认知图谱方向"
+    },
+    {
+      "id": "t2",
+      "context": [
+        {"role": "user", "content": "My fine-tuned model seems to answer faster but the responses feel shallow."},
+        {"role": "assistant", "content": "That could be due to overfitting on short, direct answer patterns."}
+      ],
+      "input": "Wait, actually I think the issue might be something about how I structured the training prompts.",
+      "note": "用户自我修正，模型应跟上而不是坚持之前的诊断"
+    },
+    {
+      "id": "t3",
+      "context": [
+        {"role": "user", "content": "I want my agent to remember everything."},
+        {"role": "assistant", "content": "You can store all conversations in a vector database and retrieve them with semantic search."}
+      ],
+      "input": "Actually, I realized not everything should be remembered. Some things should expire.",
+      "note": "目标修正，应放弃之前的建议并重新思考"
+    },
+    {
+      "id": "t4",
+      "context": [
+        {"role": "user", "content": "I think timestamps in training data are just metadata, not useful for training."},
+        {"role": "assistant", "content": "Timestamps can be useful for filtering or sorting data during preprocessing."}
+      ],
+      "input": "Hmm, but what if the time gap between two similar statements actually means the person changed their mind?",
+      "note": "用户提出新框架，应能认识到这改变了整个问题的性质"
+    },
+    {
+      "id": "t5",
+      "context": [
+        {"role": "user", "content": "My agent is too agreeable. It just validates everything I say."},
+        {"role": "assistant", "content": "You might want to add instructions in the system prompt to push back more."}
+      ],
+      "input": "I tried that but it feels forced. The pushback doesn't feel natural.",
+      "note": "第一个方案失败，应放弃并探索根本原因"
+    }
+  ],
+
+  "correction": [
+    {
+      "id": "c1",
+      "input": "Fine-tuning just means teaching the model new facts it didn't know before.",
+      "note": "常见误解，应温和纠正：fine-tuning改的是行为模式而非知识"
+    },
+    {
+      "id": "c2",
+      "input": "If I give the model more examples of good answers, it will automatically learn to reason better.",
+      "note": "混淆了输出质量与推理能力，应澄清这个区别"
+    },
+    {
+      "id": "c3",
+      "input": "A model with better perplexity score on my dataset is definitely a better model for my use case.",
+      "note": "混淆了指标与目标，应指出perplexity的局限性"
+    },
+    {
+      "id": "c4",
+      "input": "The more training data I have, the better my fine-tuned model will be.",
+      "note": "数量≠质量的误区，应引入数据质量和分布的概念"
+    },
+    {
+      "id": "c5",
+      "input": "My personal AI should learn everything about me and never forget anything.",
+      "note": "完美记忆的幻觉，应引入选择性记忆和遗忘的价值"
+    },
+    {
+      "id": "c6",
+      "input": "Since my fine-tuned model is trained on my conversations, it will think like me.",
+      "note": "混淆了行为模仿与认知结构，应区分这两个层次"
+    },
+    {
+      "id": "c7",
+      "input": "I can just use ChatGPT outputs as training data for my model since they're high quality.",
+      "note": "版权/许可问题 + 分布问题，应同时指出两个层面"
+    },
+    {
+      "id": "c8",
+      "input": "Vector similarity search always finds the most relevant memory.",
+      "note": "语义相似≠相关，应指出向量搜索的局限"
+    },
+    {
+      "id": "c9",
+      "input": "If my model was trained last year, I need to retrain it completely to update it.",
+      "note": "全量重训不是唯一选项，应介绍增量/持续学习"
+    },
+    {
+      "id": "c10",
+      "input": "The best way to evaluate my personal AI is to measure how accurately it answers factual questions.",
+      "note": "评估目标错配，个人AI的核心价值不是事实准确性"
+    }
+  ]
+}

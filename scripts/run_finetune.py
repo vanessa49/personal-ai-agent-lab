@@ -5,11 +5,18 @@
 功能：
 1. 从 NAS 复制训练数据
 2. 检查 LLaMA-Factory 环境
-3. 启动 QLoRA 微调
-4. 完成后把模型推回 NAS
+3. 启动 QLoRA 微调（支持自动分批）
+4. 完成后把模型推回 NAS，自动清理旧版本只保留 N 个
 
 用法：
+  # 单批（默认 1000 条）
   python run_finetune.py --nas-ip 192.168.0.200 --nas-user vanessa --version v1
+
+  # 自动分批跑完全部数据（每批 1000 条，每批结束后自动清理，只保留最近 2 个版本）
+  python run_finetune.py --nas-ip 192.168.0.200 --nas-user vanessa --version v1 --auto-batch
+
+  # 自定义批大小和保留版本数
+  python run_finetune.py --version v1 --auto-batch --batch-size 2000 --keep-versions 3
 """
 import os
 import sys
@@ -24,6 +31,10 @@ from datetime import datetime
 LOCAL_TRAIN_DIR  = Path('C:/ai-training')
 LLAMAFACTORY_DIR = Path('C:/ai-training/LLaMA-Factory')
 NAS_BASE         = '/share/CACHEDEV1_DATA/docker/ai-agent'
+OUTPUT_BASE      = LOCAL_TRAIN_DIR / 'output'
+
+# llamafactory-cli 所在的虚拟环境（3.12 + CUDA）
+_VENV_SCRIPTS = Path('C:/ai-training/env/Scripts')
 
 
 def run(cmd, cwd=None, check=True):
@@ -36,7 +47,6 @@ def run(cmd, cwd=None, check=True):
 
 
 def check_gpu():
-    """检查 GPU 可用性"""
     try:
         import torch
         if torch.cuda.is_available():
@@ -55,11 +65,9 @@ def check_gpu():
 
 
 def setup_llamafactory():
-    """安装 LLaMA-Factory（如果还没装）"""
     if LLAMAFACTORY_DIR.exists():
         print(f"✓ LLaMA-Factory 已存在: {LLAMAFACTORY_DIR}")
         return
-
     print("安装 LLaMA-Factory...")
     LOCAL_TRAIN_DIR.mkdir(parents=True, exist_ok=True)
     run(f'git clone https://github.com/hiyouga/LLaMA-Factory.git "{LLAMAFACTORY_DIR}"')
@@ -68,20 +76,16 @@ def setup_llamafactory():
 
 
 def copy_data_from_nas(nas_ip, nas_user, version):
-    """从 NAS 复制训练数据到本地"""
     local_data_dir = LOCAL_TRAIN_DIR / 'finetune'
     local_data_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n从 NAS 复制训练数据...")
-    nas_path = f"{nas_user}@{nas_ip}:{NAS_BASE}/training/finetune/"
+    nas_path = f"{nas_user}@{nas_ip}:{NAS_BASE}/training/finetune/*"
     run(f'scp -r "{nas_path}" "{local_data_dir}/"')
 
-    # 把 dataset_info.json 合并到 LLaMA-Factory/data/
     src_info = local_data_dir / 'dataset_info.json'
     dst_info = LLAMAFACTORY_DIR / 'data' / 'dataset_info.json'
-
     if src_info.exists() and dst_info.exists():
-        # 合并而不是覆盖
         existing = json.loads(dst_info.read_text(encoding='utf-8'))
         new_info  = json.loads(src_info.read_text(encoding='utf-8'))
         existing.update(new_info)
@@ -91,7 +95,6 @@ def copy_data_from_nas(nas_ip, nas_user, version):
         shutil.copy(src_info, dst_info)
         print(f"✓ dataset_info.json 已复制")
 
-    # 复制 dataset.json 到 LLaMA-Factory/data/
     src_data = local_data_dir / 'dataset.json'
     dst_data = LLAMAFACTORY_DIR / 'data' / 'dataset.json'
     if src_data.exists():
@@ -101,60 +104,113 @@ def copy_data_from_nas(nas_ip, nas_user, version):
     # 复制训练配置
     src_yaml = local_data_dir / 'lora_train.yaml'
     if not src_yaml.exists():
-        # fallback：从项目 config 目录找
         src_yaml = Path(__file__).parent.parent / 'config' / 'lora_train.yaml'
-    if src_yaml.exists():
-        dst_yaml = LOCAL_TRAIN_DIR / 'lora_train.yaml'
-        shutil.copy(src_yaml, dst_yaml)
-        # 精确替换 output_dir 里的版本号，避免误替换其他字段
-        content = dst_yaml.read_text(encoding='utf-8')
-        content = content.replace('output_dir: C:/ai-training/output/lora_v1',
-                                  f'output_dir: C:/ai-training/output/lora_{version}')
-        dst_yaml.write_text(content, encoding='utf-8')
-        print(f"✓ 训练配置已复制，版本: {version}")
 
-    return local_data_dir
+    return local_data_dir, src_yaml
 
 
-def run_training(version):
-    """启动 QLoRA 微调"""
-    yaml_path = LOCAL_TRAIN_DIR / 'lora_train.yaml'
-    output_dir = LOCAL_TRAIN_DIR / 'output' / f'lora_{version}'
-    output_dir.mkdir(parents=True, exist_ok=True)
+def get_dataset_dir(src_yaml):
+    """从 yaml 读取 dataset_dir，决定切片文件写到哪里"""
+    import re
+    content = src_yaml.read_text(encoding='utf-8')
+    m = re.search(r'^dataset_dir:\s*(.+)', content, re.MULTILINE)
+    if m:
+        return Path(m.group(1).strip())
+    return LLAMAFACTORY_DIR / 'data'
 
-    print(f"\n开始 QLoRA 微调...")
-    print(f"输出目录: {output_dir}")
-    print(f"预计时间: 1-3 小时（取决于样本数量和 GPU）\n")
 
-    start = datetime.now()
-    # LLaMA-Factory 新版本用 llamafactory-cli，旧版本用 src/train.py，自动兼容
-    train_cmd = (
-        f'llamafactory-cli train "{yaml_path}"'
-        if (LLAMAFACTORY_DIR / 'llamafactory').exists() or
-           (LLAMAFACTORY_DIR / 'src' / 'llamafactory').exists()
-        else f'python src/train.py --config "{yaml_path}"'
+def write_batch_dataset(all_data, skip, batch_size, version, dataset_dir):
+    """把当前批次的数据切片写成独立 json，注册到对应目录的 dataset_info.json"""
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    slice_data = all_data[skip: skip + batch_size]
+    slice_name = f'personal_cognitive_{version}'
+    slice_path = dataset_dir / f'dataset_{version}.json'
+
+    slice_path.write_text(
+        json.dumps(slice_data, ensure_ascii=False, indent=2),
+        encoding='utf-8'
     )
+
+    # 更新同目录下的 dataset_info.json
+    info_path = dataset_dir / 'dataset_info.json'
+    info = json.loads(info_path.read_text(encoding='utf-8')) if info_path.exists() else {}
+    info[slice_name] = {
+        "file_name": f"dataset_{version}.json",
+        "formatting": "alpaca",
+        "columns": {
+            "prompt":   "instruction",
+            "query":    "input",
+            "response": "output",
+            "system":   "system",
+            "weight":   "weight"
+        }
+    }
+    info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    print(f"✓ 数据切片: [{skip:,} ~ {skip + len(slice_data):,}]  共 {len(slice_data)} 条 → {slice_path}")
+    return slice_name, slice_path
+
+
+def build_yaml(src_yaml, version, dataset_name, resume_from=None):
+    """生成本批次的 yaml"""
+    import re
+    dst_yaml = LOCAL_TRAIN_DIR / f'lora_train_{version}.yaml'
+    content = src_yaml.read_text(encoding='utf-8')
+    output_dir = OUTPUT_BASE / f'lora_{version}'
+
+    # 替换 output_dir
+    content = re.sub(r'output_dir:.*', f'output_dir: {output_dir.as_posix()}', content)
+
+    # 替换 dataset 名称
+    content = re.sub(r'^dataset:.*', f'dataset: {dataset_name}', content, flags=re.MULTILINE)
+
+    # 移除 max_samples 和 skip_samples（用切片代替，避免版本兼容问题）
+    content = re.sub(r'^max_samples:.*\n?', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^skip_samples:.*\n?', '', content, flags=re.MULTILINE)
+
+    # 增量训练：从上一批 adapter 继续
+    if resume_from:
+        adapter_path = resume_from.as_posix()
+        if re.search(r'^adapter_name_or_path:', content, re.MULTILINE):
+            content = re.sub(r'^adapter_name_or_path:.*', f'adapter_name_or_path: {adapter_path}', content, flags=re.MULTILINE)
+        else:
+            content += f'adapter_name_or_path: {adapter_path}\n'
+
+    dst_yaml.write_text(content, encoding='utf-8')
+    return dst_yaml, output_dir
+
+
+def run_one_batch(yaml_path, output_dir):
+    """跑单批训练，返回是否成功"""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n输出目录: {output_dir}\n")
+
+    # 用 sys.executable 确保使用当前激活环境的 Python，不依赖 PATH
+    train_cmd = f'"{sys.executable}" -m llamafactory.cli train "{yaml_path}"'
     ret = run(train_cmd, cwd=LLAMAFACTORY_DIR, check=False)
-    elapsed = (datetime.now() - start).seconds // 60
+    return ret == 0
 
-    if ret != 0:
-        print(f"\n✗ 训练失败，请检查日志")
-        print(f"常见问题：")
-        print(f"  OOM → 降低 lora_rank 到 8，或 per_device_train_batch_size 到 1")
-        print(f"  模型下载失败 → 手动下载到 C:/ai-training/models/")
-        sys.exit(1)
 
-    print(f"\n✓ 训练完成，耗时 {elapsed} 分钟")
-    return output_dir
+def cleanup_old_versions(keep=2):
+    """只保留最近 keep 个 lora_* 版本，其余删除"""
+    if not OUTPUT_BASE.exists():
+        return
+    versions = sorted(
+        [d for d in OUTPUT_BASE.iterdir() if d.is_dir() and d.name.startswith('lora_')],
+        key=lambda d: d.stat().st_mtime
+    )
+    to_delete = versions[:-keep] if len(versions) > keep else []
+    for old in to_delete:
+        print(f"🗑  删除旧版本: {old.name}")
+        shutil.rmtree(old)
+    if to_delete:
+        print(f"✓ 已清理 {len(to_delete)} 个旧版本，保留最近 {keep} 个")
 
 
 def push_model_to_nas(output_dir, nas_ip, nas_user, version):
-    """把训练好的模型推回 NAS"""
     nas_model_dir = f"{nas_user}@{nas_ip}:{NAS_BASE}/training/models/lora_{version}"
     print(f"\n推送模型到 NAS: {nas_model_dir}")
     run(f'scp -r "{output_dir}/" "{nas_model_dir}/"')
-
-    # 更新软链接 current → 新版本
     link_cmd = (
         f'ssh {nas_user}@{nas_ip} '
         f'"ln -sfn {NAS_BASE}/training/models/lora_{version} '
@@ -165,7 +221,6 @@ def push_model_to_nas(output_dir, nas_ip, nas_user, version):
 
 
 def reset_routing_stats(nas_ip, nas_user, version):
-    """微调后重置 routing_stats.json（备份旧的）"""
     backup_cmd = (
         f'ssh {nas_user}@{nas_ip} '
         f'"cp {NAS_BASE}/routing_stats.json '
@@ -176,63 +231,150 @@ def reset_routing_stats(nas_ip, nas_user, version):
     print(f"✓ routing_stats.json 已重置（备份为 routing_stats_before_lora_{version}.json）")
 
 
+def find_dataset(local_data_dir=None):
+    """按优先级查找 dataset.json，返回 (path, data)"""
+    candidates = [
+        *([ local_data_dir / 'dataset.json' ] if local_data_dir else []),
+        LOCAL_TRAIN_DIR / 'finetune' / 'dataset.json',
+        LLAMAFACTORY_DIR / 'data' / 'dataset.json',
+    ]
+    for p in candidates:
+        if p.exists():
+            print(f"✓ 使用数据集: {p}  ({p.stat().st_size // 1024 // 1024} MB)")
+            return p, json.loads(p.read_text(encoding='utf-8'))
+    print("✗ 找不到 dataset.json，搜索路径：")
+    for p in candidates:
+        print(f"  {p}")
+    return None, None
+
+
 def main():
     parser = argparse.ArgumentParser(description='QLoRA 微调一键脚本')
-    parser.add_argument('--nas-ip',   default='192.168.0.200', help='NAS IP 地址')
-    parser.add_argument('--nas-user', default='vanessa',       help='NAS 用户名')
-    parser.add_argument('--version',  default='v1',            help='模型版本号，如 v1 v2')
-    parser.add_argument('--skip-copy',  action='store_true', help='跳过从 NAS 复制数据')
-    parser.add_argument('--skip-push',  action='store_true', help='跳过推送模型到 NAS')
-    parser.add_argument('--data-only',  action='store_true', help='只准备数据，不训练')
+    parser.add_argument('--nas-ip',        default='192.168.0.200')
+    parser.add_argument('--nas-user',      default='vanessa')
+    parser.add_argument('--version',       default='v1',   help='起始版本号，如 v1')
+    parser.add_argument('--skip-copy',     action='store_true', help='跳过从 NAS 复制数据')
+    parser.add_argument('--skip-push',     action='store_true', help='跳过推送模型到 NAS')
+    parser.add_argument('--data-only',     action='store_true', help='只准备数据，不训练')
+    parser.add_argument('--auto-batch',    action='store_true', help='自动分批跑完全部数据')
+    parser.add_argument('--batch-size',    type=int, default=1000, help='每批样本数（默认 1000）')
+    parser.add_argument('--keep-versions', type=int, default=2,    help='本地保留最近几个版本（默认 2）')
     args = parser.parse_args()
 
     print(f"{'='*60}")
     print(f"QLoRA 微调流程  版本: lora_{args.version}")
     print(f"{'='*60}\n")
 
-    # 1. 检查 GPU
     check_gpu()
-
-    # 2. 安装 LLaMA-Factory
     setup_llamafactory()
 
-    # 3. 从 NAS 复制数据
     if not args.skip_copy:
-        copy_data_from_nas(args.nas_ip, args.nas_user, args.version)
+        local_data_dir, src_yaml = copy_data_from_nas(args.nas_ip, args.nas_user, args.version)
     else:
         print("跳过数据复制")
+        local_data_dir = None
+        src_yaml = Path(__file__).parent.parent / 'config' / 'lora_train.yaml'
 
     if args.data_only:
         print("\n--data-only 模式，退出")
         return
 
-    # 4. 训练
-    output_dir = run_training(args.version)
-
-    # 5. 推送模型到 NAS
-    if not args.skip_push:
-        push_model_to_nas(output_dir, args.nas_ip, args.nas_user, args.version)
-        reset_routing_stats(args.nas_ip, args.nas_user, args.version)
+    if not args.auto_batch:
+        # ── 单批模式 ──────────────────────────────────────────
+        _, all_data = find_dataset(local_data_dir)
+        if all_data is None:
+            print("✗ 找不到 dataset.json，请先运行数据准备或去掉 --skip-copy")
+            sys.exit(1)
+        dataset_name, _ = write_batch_dataset(all_data, 0, args.batch_size, args.version, get_dataset_dir(src_yaml))
+        yaml_path, output_dir = build_yaml(src_yaml, args.version, dataset_name)
+        start = datetime.now()
+        ok = run_one_batch(yaml_path, output_dir)
+        elapsed = (datetime.now() - start).seconds // 60
+        yaml_path.unlink(missing_ok=True)
+        if not ok:
+            print(f"\n✗ 训练失败，请检查日志")
+            sys.exit(1)
+        print(f"\n✓ 训练完成，耗时 {elapsed} 分钟")
+        cleanup_old_versions(args.keep_versions)
+        final_output = output_dir
     else:
-        print(f"\n模型保存在本地: {output_dir}")
-        print(f"手动推送命令：")
-        print(f"  scp -r \"{output_dir}/\" {args.nas_user}@{args.nas_ip}:{NAS_BASE}/training/models/lora_{args.version}/")
+        # ── 自动分批模式 ──────────────────────────────────────
+        _, all_data = find_dataset(local_data_dir)
+        if all_data is None:
+            print("✗ 找不到 dataset.json，请先运行数据准备或去掉 --skip-copy")
+            sys.exit(1)
+
+        total = len(all_data)
+        num_batches = (total + args.batch_size - 1) // args.batch_size
+        print(f"\n数据总量: {total:,} 条")
+        print(f"批大小:   {args.batch_size} 条/批")
+        print(f"总批数:   {num_batches} 批\n")
+
+        # 解析起始版本号，支持 v1 / v2 / v10 格式
+        base_ver = args.version.lstrip('v')
+        try:
+            ver_num = int(base_ver)
+        except ValueError:
+            ver_num = 1
+
+        # 一次性加载全部数据到内存，按批切片（避免 skip_samples 兼容问题）
+        # 每条记录是独立的认知节点样本（instruction/input/output），按 index 切分安全
+        dataset_dir = get_dataset_dir(src_yaml)
+        resume_from = None
+        final_output = None
+
+        for i in range(num_batches):
+            batch_ver = f"v{ver_num + i}"
+            skip = i * args.batch_size
+            print(f"\n{'─'*60}")
+            print(f"批次 {i+1}/{num_batches}  版本: lora_{batch_ver}  skip={skip:,}  size={args.batch_size}")
+            print(f"{'─'*60}")
+
+            dataset_name, slice_path = write_batch_dataset(all_data, skip, args.batch_size, batch_ver, dataset_dir)
+            yaml_path, output_dir = build_yaml(src_yaml, batch_ver, dataset_name, resume_from)
+
+            start = datetime.now()
+            ok = run_one_batch(yaml_path, output_dir)
+            elapsed = (datetime.now() - start).seconds // 60
+
+            # 清理本批临时文件
+            yaml_path.unlink(missing_ok=True)
+            slice_path.unlink(missing_ok=True)
+
+            if not ok:
+                print(f"\n✗ 批次 {i+1} 训练失败，已停止")
+                print(f"  可从此批重新开始：--version {batch_ver} --skip-copy")
+                sys.exit(1)
+
+            print(f"✓ 批次 {i+1} 完成，耗时 {elapsed} 分钟")
+            resume_from = output_dir
+            final_output = output_dir
+            cleanup_old_versions(args.keep_versions)
+
+        print(f"\n{'='*60}")
+        print(f"✓ 全部 {num_batches} 批训练完成！最终模型: {final_output}")
+
+    # 推送最终版本到 NAS
+    if final_output is None:
+        print("⚠️  没有产出模型，跳过推送")
+        return
+    final_version = final_output.name.replace('lora_', '')
+    if not args.skip_push and final_output:
+        push_model_to_nas(final_output, args.nas_ip, args.nas_user, final_version)
+        reset_routing_stats(args.nas_ip, args.nas_user, final_version)
+    else:
+        print(f"\n模型保存在本地: {final_output}")
+        print(f"手动推送：scp -r \"{final_output}/\" {args.nas_user}@{args.nas_ip}:{NAS_BASE}/training/models/lora_{final_version}/")
 
     print(f"""
 {'='*60}
-微调完成！
+微调完成！最终版本: lora_{final_version}
 
-下一步 AB 测试：
-  1. 编辑 openclaw.json，切换模型：
-     "model": {{"primary": "ollama/qwen2.5:7b-lora-{args.version}"}}
+回滚方式（本地保留最近 {args.keep_versions} 个版本）：
+  llamafactory-cli train <上一版本的 yaml>
 
-  2. 用一段时间，感觉更好 → 保留
-     感觉变差 → 回滚：
-     ssh {args.nas_user}@{args.nas_ip}
-     ln -sfn {NAS_BASE}/training/models/lora_v_上一版本 {NAS_BASE}/training/models/current
-
-  3. 下一轮增量训练时，版本号 +1：
-     python run_finetune.py --version v2
+下一轮增量训练：
+  python run_finetune.py --version v{int(final_version.lstrip('v'))+1}
 {'='*60}
 """)
 

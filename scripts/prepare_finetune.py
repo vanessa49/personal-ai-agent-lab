@@ -33,6 +33,17 @@ SYSTEM_PROMPT = (
 )
 
 
+def sanitize_surrogates(obj):
+    """递归清洗 lone surrogate 字符，替换为 U+FFFD"""
+    if isinstance(obj, str):
+        return obj.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+    if isinstance(obj, dict):
+        return {k: sanitize_surrogates(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_surrogates(i) for i in obj]
+    return obj
+
+
 def read_jsonl(path):
     if not path.exists():
         return []
@@ -121,10 +132,19 @@ def cognitive_to_alpaca(sample, use_recency=True, tau_days=RECENCY_TAU_DAYS):
     }.get(relation, '继续推进思考')
 
     ts = sample.get('timestamp', '')
+    output = sample.get('output', '')
+    
+    # 质量检查：过滤低质量样本
+    if len(output) < 10:
+        return None
+    # 检测重复循环（如 "aaa aaa aaa"）
+    if len(output) >= 20 and output.count(output[:20]) > 3:
+        return None
+    
     return {
         'instruction': f"{relation_desc}：",
         'input': sample.get('input', ''),
-        'output': sample.get('output', ''),
+        'output': output,
         'system': SYSTEM_PROMPT,
         'weight': get_sample_weight(sample, use_recency, tau_days),
         'timestamp': ts,
@@ -187,6 +207,7 @@ def main():
 
     if not args.dialog_only:
         cognitive_converted = [cognitive_to_alpaca(s, use_recency=not args.no_recency, tau_days=args.tau) for s in cognitive_raw]
+        cognitive_converted = [s for s in cognitive_converted if s is not None]  # 过滤 None
         cognitive_converted = filter_quality(cognitive_converted)
         alpaca_samples.extend(cognitive_converted)
         print(f"认知样本过滤后: {len(cognitive_converted)} 条")
@@ -219,6 +240,7 @@ def main():
 
     # 写出 dataset.json（LLaMA-Factory 格式）
     dataset_path = OUTPUT_DIR / 'dataset.json'
+    alpaca_samples = sanitize_surrogates(alpaca_samples)
     dataset_path.write_text(
         json.dumps(alpaca_samples, ensure_ascii=False, indent=2),
         encoding='utf-8'

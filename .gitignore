@@ -18,12 +18,26 @@ test_output/
 test_sample/
 seed/
 
+# SQuAD and other large datasets
+train-v1.1.json
+*.json.gz
+squad_conversations/
+squad_cognitive/
+
+# Virtual environments
+env/
+.venv/
+venv/
+
 # Test and validation reports (generated, not source)
 DATA_VALIDATION_REPORT.md
 
 # Secrets and personal config
 .env
 config/openclaw.json
+
+# Eval pipeline results (generated, not source)
+eval_pipeline/results/
 
 # Internal working documents
 RELATION_TYPES_UPDATE.md
