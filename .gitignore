@@ -35,6 +35,8 @@ DATA_VALIDATION_REPORT.md
 # Secrets and personal config
 .env
 config/openclaw.json
+eval_pipeline/config.py
+eval_pipeline/.rag_embed_cache.json
 
 # Eval pipeline results (generated, not source)
 eval_pipeline/results/
