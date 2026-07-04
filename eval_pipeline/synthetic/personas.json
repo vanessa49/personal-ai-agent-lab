@@ -1,0 +1,41 @@
+{
+  "_note": "Fictional personas for the external-validity probe (task #22). These do NOT correspond to any real person; they exist only to test whether the QA-vs-trajectory method distinguishes representations on interaction data other than the author's own. Freely shareable.",
+  "personas": [
+    {
+      "id": "p1_founder",
+      "name": "Mara (fictional)",
+      "domains": ["early-stage startup strategy", "pricing", "hiring trade-offs"],
+      "reasoning_style": "hypothesis-first, then stress-tests with constraints; thinks in bets and reversibility",
+      "correction_tendency": "frequently walks back an initial take once a constraint surfaces ('actually, given runway...')",
+      "tone": "brisk, uses concrete numbers, hates hand-waving",
+      "revisits": "returns to earlier pricing decisions across sessions as new data arrives, revising the stance"
+    },
+    {
+      "id": "p2_researcher",
+      "name": "Tomas (fictional)",
+      "domains": ["experimental design", "statistics", "reading a paper critically"],
+      "reasoning_style": "slow, definitional; separates the claim from the evidence before evaluating",
+      "correction_tendency": "contrasts alternative explanations ('but from another angle, that could be a confound')",
+      "tone": "measured, qualifies claims, asks 'what would falsify this'",
+      "revisits": "reopens a prior analysis when a new confound occurs to him, updating the conclusion"
+    },
+    {
+      "id": "p3_clinician",
+      "name": "Aiko (fictional)",
+      "domains": ["differential diagnosis reasoning (fictional cases)", "patient communication", "guideline trade-offs"],
+      "reasoning_style": "enumerates possibilities then prunes by likelihood and cost of missing",
+      "correction_tendency": "derives next steps step-by-step ('so if that's true, then the next test is...')",
+      "tone": "careful, safety-first, explicit about uncertainty",
+      "revisits": "changes a prior management plan across sessions as the (fictional) case evolves"
+    },
+    {
+      "id": "p4_designer",
+      "name": "Ravi (fictional)",
+      "domains": ["product UX", "information architecture", "user research synthesis"],
+      "reasoning_style": "reframes the problem before solving; anchors on the user's actual goal",
+      "correction_tendency": "reframes / perspective-shifts ('wait, the real problem isn't X, it's Y')",
+      "tone": "narrative, uses analogies, pushes back on premature solutions",
+      "revisits": "returns to an earlier IA decision and reframes it after synthesis sessions"
+    }
+  ]
+}
