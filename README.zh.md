@@ -2,280 +2,146 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-> 基于对话历史与长期记忆，构建自我演化个人 AI Agent 的实验性系统。
+> 一个早期个人 AI 原型的公开工程快照：本地大模型、长期记忆、Agent 插件、对话处理与微调探索。
 
-**状态：研究原型 / 开发中**
+**状态：历史原型 / 作为公开项目记录维护**
 
-## 深入了解本项目：
+这个仓库记录了我最初探索长期 Personal AI 时搭建的工程原型。它现在**不是**后来研究工作的最新 scientific authority，也不是当前 CHI 稿件或复现代码的主仓。
 
-本项目不仅包含代码实现，也配套记录了关于 **个人 AI 系统** 的一系列思考与实践。
+最初的系统横跨 GPU 笔记本与常驻 NAS，组合 Ollama、OpenClaw、SQLite/sqlite-vec、Qdrant、自定义插件以及对话处理流水线。真正把这个项目推向下一阶段的，不是又换了一个模型，而是一个数据表示问题：如果 Personal AI 想从一个人的长期交互中学习，真的应该把这些历史压成彼此独立的 Q&A 吗？
 
-### 核心理念
+这个问题后来发展成独立的 longitudinal human-AI interaction / thought trajectory 研究。当前论文与复现工作在独立仓库中维护；这里保留的一些 cognitive / fine-tuning 脚本属于探索过程中的历史路径，不应被理解为后续论文的最新实现或证据来源。
 
-- **Medium（理念与思考）** – [如果你的 AI 可以和你一起成长](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
-  介绍个人 AI 的核心设想：AI 不只是工具，而是能够随着个人认知一起演化的系统。
+## 我做了什么
 
-- **Dev.to（实现与经验）** – [构建一个随你成长的个人 AI 代理](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
-  记录系统的初步实现过程、技术挑战以及开发中的实践经验。
+这个原型主要探索 Personal AI 的四层能力：
 
-### 思维轨迹（Thought Trajectories）
+1. **本地推理** —— GPU 机器运行 Ollama。
+2. **常驻 Agent Runtime** —— NAS / 常开服务器运行 OpenClaw。
+3. **长期记忆与检索** —— 主 memory path 使用 SQLite + sqlite-vec；Qdrant 作为独立实验向量库。
+4. **学习流水线探索** —— 对话导入、训练样本生成与审核、认知切分，以及面向 QLoRA 的微调实验。
 
-- **Medium（方法与哲学）** – [Personal AI isn't about answers — it's about thought trajectories](https://medium.com/design-bootcamp/personal-ai-isnt-about-answers-it-s-about-thought-trajectories-d1afd1d4b87b)  
-  讨论为什么 AI 交互不应该只是问答，而应该记录和理解 **思考的演化轨迹**。
+### 系统架构
 
-- **Dev.to（技术实现）** – [Personal AI isn't Q&A, it's iteration](https://dev.to/vanessa49/personal-ai-isnt-qa-its-iteration-3496)  
-  介绍具体技术方案：数据结构设计、edge 类型，以及对 1122 次对话数据的分析。
-
----
-
-## 项目理念
-
-GPT、Claude、Gemini——这些模型代表的是人类集体智慧的平均化压缩，是「普渡众生」式的存在。它们被优化成对所有人都有用，由公司决定它们的成长方向。
-
-这不是这个项目想探索的问题。
-
-这个项目想探索的是：**有没有可能存在一种完全不同的 AI——不为所有人优化，而是随着一个具体的人一起成长？**
-
-闭源模型已经有记忆功能了，这不是差距所在。真正的差距在于：它的权重、它的推理模式、它的成长方向，由谁决定。
-
-本地可微调的模型提供了一种不同的可能性：一个实际权重可以被个人交互塑造的系统。不只是记忆层，而是底层的推理倾向，都可以随着具体的一个人不断发展。
-```
-本地 LLM  +  长期记忆  +  持续微调  →  个体认知延伸
-```
----
-
-## 系统架构
-
-本项目采用**分布式部署**方案：
-
-```
+```text
 ┌─────────────────────────┐        ┌──────────────────────────────┐
 │   GPU 机器              │        │   NAS / 常驻服务器           │
 │                         │        │                              │
 │   Ollama                │◄──────►│   OpenClaw（Docker）         │
-│   - qwen3.5:9b          │        │   - 插件系统                 │
-│   - qwen2.5:7b          │        │   - 记忆（SQLite + vec）     │
-│   - bge-m3（向量嵌入）  │        │   - 训练数据流水线           │
-└─────────────────────────┘        │                              │
+│   - 本地 LLM            │        │   - Plugin System            │
+│   - bge-m3 embedding    │        │   - Memory (SQLite + vec)    │
+└─────────────────────────┘        │   - Processing Pipelines     │
+                                   │                              │
                                    │   Qdrant（Docker）           │
-                                   │   - 向量检索                 │
+                                   │   - Experimental vector DB   │
                                    └──────────────────────────────┘
 ```
 
-GPU 机器负责推理（Ollama），NAS/服务器通过 Docker 运行 OpenClaw 和 Qdrant，通过局域网连接 Ollama。
+OpenClaw 的主记忆路径使用 SQLite + sqlite-vec。这个快照中的 Qdrant 是外部实验数据库，并没有接入 OpenClaw 的 `memory_search` 主链路。
 
----
+## Agent 扩展
 
-## 核心组件
+原型阶段实现了 6 个自定义插件：
 
-### 插件（`/plugins`）
-
-扩展 OpenClaw Agent 运行时的自定义行为：
-
-| 插件 | 说明 |
+| Plugin | 用途 |
 |---|---|
-| `tool-logger` | 记录每次工具调用到日志文件 |
-| `task-logger` | 追踪 Agent 任务生命周期 |
-| `safe-delete-enforcer` | 防止不安全的文件删除操作 |
-| `qdrant-auto-checker` | 检测到向量数据库相关关键词时自动注入诊断指令 |
-| `training-sample-generator` | 将对话自动转换为训练样本 |
-| `memory-compressor` | 自动压缩过长的对话上下文 |
+| `tool-logger` | 记录工具调用 |
+| `task-logger` | 追踪任务生命周期 |
+| `safe-delete-enforcer` | 保护高风险删除操作 |
+| `qdrant-auto-checker` | 查询 / 诊断外部 Qdrant |
+| `training-sample-generator` | 从对话生成候选训练样本 |
+| `memory-compressor` | 压缩过长对话上下文 |
 
-### Hooks（`/hooks`）
+另外还有 task logging、memory compression、Qdrant diagnosis、safe deletion、sample generation 对应的 hooks / skills。
 
-基于事件触发的 Agent 钩子：
+## 这里保留的两条数据处理路径
 
-| Hook | 触发时机 | 说明 |
-|---|---|---|
-| `auto-task-logger` | 任务事件 | 自动记录任务开始/结束 |
-| `qdrant-auto-checker` | 关键词匹配 | 运行 Qdrant 健康检查 |
-| `safe-delete-enforcer` | 工具调用前 | 拦截危险删除操作 |
-
-### Skills（`/skills`）
-
-加载到 Agent 上下文的可复用技能定义：
-
-- `memory-compress` — 压缩和摘要记忆块
-- `qdrant-check` — 诊断向量数据库状态
-- `safe-delete` — 安全文件删除工作流
-- `task-logger` — 结构化任务日志
-- `training-sample-generator` — 从对话生成微调样本
-
-### 脚本（`/scripts`）
-
-训练数据流水线工具：
-
-```
-对话日志
+```text
+传统路径
+conversation logs
     ↓
-batch_process_conversations.js   # 解析和分块对话
+按 user / assistant turn 处理
     ↓
-training-sample-generator        # 生成候选训练样本
+候选训练样本
     ↓
-agent_review_samples.js/.py      # Agent 自动评审
+Agent + 人工审核
     ↓
-review_samples.js                # 人工审核界面
-    ↓
-微调数据集
+fine-tuning dataset
 ```
 
----
+```text
+探索性 cognitive path
+conversation logs
+    ↓
+semantic / cognitive segmentation
+    ↓
+typed trajectory graph
+    ↓
+weighted sample preparation
+    ↓
+fine-tuning + evaluation experiments
+```
 
-## 记忆系统
+第二条路径正是这个工程项目逐渐变成研究问题的桥梁。它在这里保留是为了记录 project lineage，而不是作为后续研究的 canonical implementation。
 
-Agent 使用以下方案存储长期记忆：
+## 项目演进
 
-- SQLite + sqlite-vec（向量扩展）
-- 嵌入模型：`bge-m3`（通过 Ollama）
-- 混合检索：向量（0.7）+ 文本（0.3）
-> 注：向量检索使用 SQLite 内置向量存储。Qdrant 作为独立容器运行，目前通过 Plugin API 手动查询，尚未集成到 `memory_search` 流水线中。
----
+### 1. 从产品问题出发
 
-## 前置条件
+一个本地 AI 系统能不能通过持续学习个人的真实交互历史，逐渐变得比通用云模型更“属于这个人”？
 
-- Agent 节点（NAS/服务器）已安装 Docker 和 Docker Compose
-- GPU 机器运行 Ollama，且在局域网内可访问
-- Ollama 主机已拉取所需模型：
-  ```bash
-  ollama pull qwen3.5:9b-q4_K_M
-  ollama pull qwen2.5:7b-instruct-q4_K_M
-  ollama pull bge-m3
-  ```
+### 2. 先把东西做出来
 
----
+我先搭了 GPU + NAS 的本地系统，补上持续记忆、自定义 Agent 行为和训练数据处理路径。
 
-## 快速开始
+### 3. 真正的问题变成数据表示
 
-### 1. 克隆并配置
+当我开始准备历史对话用于学习时，核心问题从“用哪个模型”变成了“长期交互到底应该怎样表示”。简单 Q&A slicing 会丢掉大量迭代、修正和前后依赖结构。
+
+### 4. 研究与原型正式拆开
+
+这个观察后来发展成独立研究。于是工程原型、科学证据与投稿材料不再共用一个仓库 authority；当前研究代码和 manuscript workflow 已经迁到独立仓库。
+
+## 相关文章
+
+- **Medium** — [What if your AI could grow with you?](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
+  最初的产品问题，以及“growth ownership”的概念。
+- **Dev.to** — [Building a personal AI agent that grows with you](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
+  早期工程实现与踩坑记录。
+- **Medium** — [Personal AI isn't about answers — it's about thought trajectories](https://medium.com/design-bootcamp/personal-ai-isnt-about-answers-it-s-about-thought-trajectories-d1afd1d4b87b)  
+  工程实践如何引出数据表示问题。
+- **Dev.to** — [Personal AI isn't Q&A, it's iteration](https://dev.to/vanessa49/personal-ai-isnt-qa-its-iteration-3496)  
+  Thought trajectory 思路的技术伴随文章。
+
+## 历史原型快速启动
+
+> 这是实验快照，不是持续支持的生产套件。不要直接拿真实个人数据跑；先检查配置、路径与当前 OpenClaw 兼容性。
 
 ```bash
 git clone https://github.com/vanessa49/personal-ai-agent-lab.git
 cd personal-ai-agent-lab
-
-# 复制并编辑配置文件
 cp config/openclaw.json.example ~/.openclaw/config.json
-# 将 <OLLAMA_HOST> 替换为你的 GPU 机器 IP
 ```
 
-### 2. 编辑 `docker-compose.yml`
-
-替换占位符：
-
-```yaml
-environment:
-  - OLLAMA_HOST=http://<你的GPU机器IP>:11434
-volumes:
-  - /你的/openclaw/配置路径:/home/node/.openclaw
-  - /你的/ai-agent/路径:/ai-agent
-```
-
-### 3. 在 Agent 节点启动服务
+配置 Ollama host 和本机 volume 后：
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-### 4. 将插件和配置复制到容器
+这个原型曾基于 OpenClaw `2026.3.11` 构建和测试；当前上游行为可能已经不同。
 
-```bash
-docker cp plugins/ openclaw:/ai-agent/plugins/
-docker cp hooks/   openclaw:/ai-agent/hooks/
-docker cp skills/  openclaw:/ai-agent/skills/
-docker cp scripts/ openclaw:/ai-agent/scripts/
+## 其他公开项目
 
-# 重启以加载插件
-docker restart openclaw
-```
+- [`obsidian-qdrant-pipeline-oss`](https://github.com/vanessa49/obsidian-qdrant-pipeline-oss) —— 本地优先的 Obsidian + Qdrant 文档入库与检索管道，包含明确的隐私边界和 public-release guard。
+- [`nvidia-api-lifecycle-guard`](https://github.com/vanessa49/nvidia-api-lifecycle-guard) —— 用于审计 NVIDIA hosted API / NIM 变化与兼容性的 Python 工具。
+- [`Fractal-Scripts`](https://github.com/vanessa49/Fractal-Scripts) —— 早期 creative-coding 项目，用 Python 生成和探索分形图像。
 
-### 5. 导入对话历史（可选）
+## 隐私与研究边界
 
-```bash
-# 将对话日志处理为记忆
-docker exec openclaw node /ai-agent/scripts/batch_process_conversations.js /ai-agent/memory/conversations
+真实对话历史、个人 memory store、private knowledge base、训练语料、模型 artifact，以及当前研究材料都不应该提交到这里。
 
-# 审核生成的训练样本
-docker exec -it openclaw node /ai-agent/scripts/review_samples.js 50
-```
-
----
-
-## OpenClaw 版本说明
-
-本项目基于 **OpenClaw `2026.3.11`** 构建和测试（见 `config/openclaw.json.example` 中的 `lastTouchedVersion`）。
-
-> **NAS / 离线环境注意：** 如果 Agent 节点无法直接访问互联网，无法直接 `docker pull`，需要手动转存镜像：
->
-> ```bash
-> # 在有网络的机器上：
-> docker pull ghcr.io/openclaw/openclaw:latest
-> docker save ghcr.io/openclaw/openclaw:latest | gzip > openclaw-latest.tar.gz
->
-> # 将文件传输到 NAS，然后在 NAS 上执行：
-> docker load < openclaw-latest.tar.gz
-> ```
->
-> 最新版本请查看 [ghcr.io/openclaw/openclaw](https://ghcr.io/openclaw/openclaw)。
-
-查看当前运行的 OpenClaw 版本：
-
-```bash
-# 查看容器镜像标签
-docker inspect openclaw --format '{{index .Config.Labels "org.opencontainers.image.version"}}'
-
-# 或查看容器内配置文件
-docker exec openclaw cat /home/node/.openclaw/config.json | grep lastTouchedVersion
-
-# SSH 到 NAS 后执行：
-docker images ghcr.io/openclaw/openclaw
-```
-
----
-
-## 当前状态
-
-已完成：
-- 插件系统（全部 6 个插件）
-- 记忆导入与混合检索
-- 对话处理流水线
-- 训练样本生成与审核
-
-进行中：
-- 记忆检索精度调优
-- 自动化微调流水线
-- Agent 活动仪表盘
-
----
-
-## 为什么做这个项目
-
-云端 AI 模型在做一件很了不起的事：将人类集体的推理能力压缩成一个对所有人可用的系统。
-
-但「对所有人有用」和「被你塑造」是两件完全不同的事。
-
-这个项目探索的问题是：一个本地的、可微调的模型，能不能随着一个具体的人成长——不只是记住她的偏好，而是在推理模式、处理问题的倾向上，真正被这个人的使用历史所塑造？
-
-关键的差距在于**成长的所有权**：云端模型按公司决策演化，本地模型可以按你实际的思维方式演化。
-
-这是一个早期实验，架构已经搭建，自我改进的闭环还在拼装当中。
----
-
-## 长期愿景
-
-- 跨会话记住历史对话
-- 从历史交互中持续学习
-- 适应特定用户的习惯和偏好
-- 辅助研究、知识管理和任务自动化
-- 与个人设备和本地服务集成
-
-这个 Agent 不是为了取代人类思考，而是为了延伸它。
-
----
-
-## 免责声明
-
-这是一个**研究原型**，不适用于生产环境。
-
----
+如果你是沿着后续论文或研究线索来到这里，请把这个仓库理解为**早期工程原型**，而不是当前 manuscript / evidence 的 source of truth。
 
 ## License
 
