@@ -2,335 +2,148 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-> Experimental system for building a self-improving personal AI agent based on conversation history and long-term memory.
+> A public engineering snapshot of an early personal-AI prototype: local LLM inference, long-term memory, agent plugins, conversation processing, and fine-tuning experiments.
 
-**Status: Research Prototype / Work in Progress**
+**Status: Historical prototype / maintained as a public project record**
 
-## Learn more about this project:
+This repository documents the engineering prototype that started my exploration of long-term personal AI. It is intentionally **not** the current scientific authority for the research that later grew out of it.
 
-This project is accompanied by a series of articles exploring the ideas,
-design philosophy, and technical implementation behind a personal AI system.
+The original build combined a GPU laptop, an always-on NAS, Ollama, OpenClaw, SQLite/sqlite-vec, Qdrant, custom plugins, and conversation-processing pipelines. While building it, a product question gradually turned into a data-representation question: if a personal AI is supposed to learn from a person over time, should its history really be reduced to independent Q&A pairs?
 
-### 1. Concept
+That question later developed into separate research work on longitudinal human-AI interaction and thought trajectories. Current manuscript and reproducibility work is maintained separately during the research/submission process. Some exploratory scripts remain here because they are part of the historical path, but they should not be treated as the latest paper implementation or evidence authority.
 
-- **Medium** – [What if your AI could grow with you](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
-  Introduces the core idea of personal AI and the concept of **ownership of growth**.
+## What I built
 
-- **Dev.to** – [Building a personal AI agent that grows with you](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
-  Early implementation notes and lessons from building the system.
+The prototype explored four layers of a personal-AI system:
 
-### 2. Thought Trajectories
+1. **Local inference** — Ollama on a GPU machine for local model serving.
+2. **Persistent agent runtime** — OpenClaw on an always-on NAS/server.
+3. **Long-term memory and retrieval** — SQLite + sqlite-vec for the primary memory path, with Qdrant used as a separate experimental vector store.
+4. **Learning pipeline experiments** — conversation ingestion, sample generation/review, cognitive segmentation, and QLoRA-oriented fine-tuning experiments.
 
-- **Medium** – [Personal AI isn't about answers — it's about thought trajectories](https://medium.com/design-bootcamp/personal-ai-isnt-about-answers-it-s-about-thought-trajectories-d1afd1d4b87b)
-  Explores the philosophical argument: AI conversations should capture **thinking trajectories**, not isolated answers.
+### System architecture
 
-- **Dev.to** – [Personal AI isn't Q&A, it's iteration](https://dev.to/vanessa49/personal-ai-isnt-qa-its-iteration-3496)  
-  Explores the philosophical argument: AI conversations should capture **thinking trajectories**, not isolated answers.
-
----
-
-## Project Idea
-
-Humans are shaped by their past experiences. Conversations, knowledge, and memories gradually form our personality and decision-making patterns.
-
-This project explores the idea that:
-
-> If an LLM is given access to its past interactions and learning history, it may gradually evolve into a personalized digital cognitive assistant.
-
-The goal is to build an AI agent that behaves more like another version of yourself, rather than a generic chatbot.
-
-```
-local LLM  +  long-term memory  +  conversation history  →  personalized agent
-```
-
----
-
-## System Architecture
-
-This project uses a **split deployment** model:
-
-```
+```text
 ┌─────────────────────────┐        ┌──────────────────────────────┐
 │   GPU Machine           │        │   NAS / Always-on Server     │
 │                         │        │                              │
 │   Ollama                │◄──────►│   OpenClaw (Docker)          │
-│   - qwen3.5:9b          │        │   - Plugin System            │
-│   - qwen2.5:7b          │        │   - Memory (SQLite + vec)    │
-│   - bge-m3 (embedding)  │        │   - Training Pipeline        │
-└─────────────────────────┘        │                              │
+│   - local LLMs          │        │   - Plugin System            │
+│   - bge-m3 embedding    │        │   - Memory (SQLite + vec)    │
+└─────────────────────────┘        │   - Processing Pipelines     │
+                                   │                              │
                                    │   Qdrant (Docker)            │
-                                   │   - Vector search            │
+                                   │   - Experimental vector DB   │
                                    └──────────────────────────────┘
 ```
 
-The GPU machine runs Ollama for inference. The NAS/server runs OpenClaw and Qdrant via Docker, and connects to Ollama over the local network.
+The primary OpenClaw memory path uses SQLite + sqlite-vec. Qdrant is an external experimental store and is **not** integrated into OpenClaw's `memory_search` path in this snapshot.
 
-Note: Qdrant is currently an external database accessed via plugin API. OpenClaw's memory system is SQLite + sqlite-vec; hybrid search operates on SQLite vectors.
+## Agent extensions
 
----
+The repository includes six custom plugins used during the prototype phase:
 
-## Key Components
-
-### Plugins (`/plugins`)
-
-Extend the OpenClaw agent runtime with custom behaviors:
-
-| Plugin | Description |
+| Plugin | Purpose |
 |---|---|
-| `tool-logger` | Records every tool call to a log file |
-| `task-logger` | Tracks agent task lifecycle |
-| `safe-delete-enforcer` | Prevents unsafe file deletion |
-| `qdrant-auto-checker` | Queries Qdrant via plugin API (external DB, not integrated with `memory_search`) |
-| `training-sample-generator` | Converts conversations into training samples |
-| `memory-compressor` | Compresses long conversation context automatically |
+| `tool-logger` | Record tool calls |
+| `task-logger` | Track task lifecycle |
+| `safe-delete-enforcer` | Guard destructive file operations |
+| `qdrant-auto-checker` | Query/diagnose the external Qdrant service |
+| `training-sample-generator` | Turn conversations into candidate training samples |
+| `memory-compressor` | Compress long conversation context |
 
-### Hooks (`/hooks`)
+It also contains hooks and reusable skills for task logging, memory compression, Qdrant diagnostics, safe deletion, and sample generation.
 
-Agent hooks that fire on specific events:
+## Two data-processing directions explored here
 
-| Hook | Trigger | Description |
-|---|---|---|
-| `auto-task-logger` | Task events | Logs task start/end automatically |
-| `qdrant-auto-checker` | Keyword match | Runs Qdrant health check |
-| `safe-delete-enforcer` | Pre-tool | Blocks dangerous delete operations |
+The repository contains both the original turn-oriented pipeline and the later exploratory cognitive-segmentation pipeline.
 
-### Skills (`/skills`)
-
-Reusable skill definitions loaded into agent context:
-
-- `memory-compress` — compress and summarize memory chunks
-- `qdrant-check` — diagnose vector DB state
-- `safe-delete` — safe file deletion workflow
-- `task-logger` — structured task logging
-- `training-sample-generator` — generate fine-tuning samples from conversations
-
-### Scripts (`/scripts`)
-
-Two training pipelines are available:
-
-**Traditional pipeline** (turn-based segmentation):
-```
+```text
+Traditional path
 conversation logs
-      ↓
-batch_process_conversations.js   # parse and chunk by user/assistant turns
-      ↓
-training-sample-generator        # generate candidate samples
-      ↓
-agent_review_samples.js/.py      # agent auto-review
-      ↓
-review_samples.js                # human review interface
-      ↓
+    ↓
+turn-based processing
+    ↓
+candidate samples
+    ↓
+automated + human review
+    ↓
 fine-tuning dataset
 ```
 
-**Cognitive pipeline** (semantic segmentation):
-```
+```text
+Exploratory cognitive path
 conversation logs
-      ↓
-cognitive_chunking.js            # segment by cognitive events, not turn boundaries
-      ↓                          # builds graph: nodes + typed edges
-prepare_finetune.py              # weight samples by relation type + time decay
-      ↓
-run_finetune.py                  # kick off QLoRA training
-      ↓
-run_ab_test.py                   # compare baseline vs fine-tuned model
+    ↓
+semantic / cognitive segmentation
+    ↓
+typed trajectory graph
+    ↓
+weighted sample preparation
+    ↓
+fine-tuning + evaluation experiments
 ```
 
-The cognitive pipeline segments conversations by semantic shift (topic change, correction marker, new idea) rather than user/assistant turn boundaries. Each segment becomes a node; edges between nodes carry a typed relation:
+The second path was the bridge from a product prototype into a research question. It is retained here for lineage, not as the canonical implementation of the later research.
 
-| Relation | Meaning |
-|---|---|
-| `follows` | Sequential continuation (default) |
-| `derives` | Logical inference |
-| `refines` | Explicit correction or improvement |
-| `contrasts` | Perspective shift |
-| `responds` | Direct reply across roles |
-| `iteration_final` | Convergence after a correction chain |
-| `hypothesizes` | Conditional / hypothetical reasoning |
-| `restarts` | Thought reset or reconsideration |
-| `clarifies` | More precise restatement |
-| `speculates` | Uncertain inference or guess |
+## Project lineage
 
-Samples are weighted during fine-tuning preparation:
+### 1. Product question
 
-```python
-weight_map = {
-    'iteration_final': 2.5,   # end of correction chain × depth bonus
-    'refines':         2.0,   # explicit correction
-    'contrasts':       2.0,   # perspective shift
-    'derives':         1.5,   # logical consequence
-    'clarifies':       1.5,   # precise restatement
-    'hypothesizes':    1.3,   # conditional reasoning
-    'restarts':        1.2,   # thought reset
-    'follows':         1.0,   # default
-}
-# Plus time decay: weight ×= e^(-age_in_days / 1460)
-```
+Could a local AI system become more personally useful over time by learning from a user's own interaction history rather than relying only on generic cloud-model behavior?
 
-Use `discover_relation_patterns.js` to analyze the relation distribution in your own graph data, and `compare_chunking_methods.js` to compare the two pipelines on a single conversation file.
+### 2. Prototype build
 
----
+I built a local-first system across a GPU machine and NAS, added persistent memory, custom agent behaviors, and a training-data workflow.
 
-## Memory System
+### 3. Representation problem
 
-The agent stores long-term memory using:
+While preparing historical conversations for learning, the main difficulty stopped being model choice and became **how to represent longitudinal interaction data**. Independent Q&A slices discarded much of the iterative structure I cared about.
 
-- SQLite + sqlite-vec (vector extension)
-- Embedding model: `bge-m3` via Ollama
-- Hybrid search: vector (0.7, SQLite) + text (0.3)
+### 4. Research split
 
-> Note: Vector search uses SQLite's internal vector store. Qdrant runs as a separate container and is queried manually via plugin — it is not yet integrated into the `memory_search` pipeline.
----
+That observation became a separate research program. The research repositories and manuscript workflow were split away from this engineering lab so that the prototype, scientific evidence, and submission materials would not share one authority surface.
 
-## Prerequisites
+## Articles
 
-- Docker and Docker Compose on the agent node (NAS/server)
-- Ollama running on a GPU machine reachable over the local network
-- Models pulled on the Ollama host:
-  ```bash
-  ollama pull qwen3.5:9b-q4_K_M
-  ollama pull qwen2.5:7b-instruct-q4_K_M
-  ollama pull bge-m3
-  ```
+- **Medium** — [What if your AI could grow with you?](https://medium.com/design-bootcamp/what-if-your-ai-could-grow-with-you-a4a6dcc512ac)  
+  The original product idea and the concept of ownership of growth.
+- **Dev.to** — [Building a personal AI agent that grows with you](https://dev.to/vanessa49/building-a-personal-ai-agent-that-grows-with-you-4c29)  
+  Early implementation notes from the prototype.
+- **Medium** — [Personal AI isn't about answers — it's about thought trajectories](https://medium.com/design-bootcamp/personal-ai-isnt-about-answers-it-s-about-thought-trajectories-d1afd1d4b87b)  
+  How the engineering project led to a data-representation question.
+- **Dev.to** — [Personal AI isn't Q&A, it's iteration](https://dev.to/vanessa49/personal-ai-isnt-qa-its-iteration-3496)  
+  A technical companion piece on the trajectory idea.
 
----
+## Quick start for the historical prototype
 
-## Quick Start
-
-### 1. Clone and configure
+> This is an experimental snapshot, not a supported production package. Review configuration and paths before running it on any personal data.
 
 ```bash
 git clone https://github.com/vanessa49/personal-ai-agent-lab.git
 cd personal-ai-agent-lab
-
-# Copy and edit the config
 cp config/openclaw.json.example ~/.openclaw/config.json
-# Replace <OLLAMA_HOST> with your GPU machine's IP
 ```
 
-### 2. Edit `docker-compose.yml`
-
-Replace the placeholder values:
-
-```yaml
-environment:
-  - OLLAMA_HOST=http://<your-gpu-machine-ip>:11434
-volumes:
-  - /your/openclaw/config:/home/node/.openclaw
-  - /your/ai-agent/path:/ai-agent
-```
-
-### 3. Start services on the agent node
+Configure your Ollama host and local volumes, then start the agent-side services:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-### 4. Copy plugins and config into the container
+The prototype was built around OpenClaw `2026.3.11`; current upstream behavior may differ.
 
-```bash
-# Copy project files into the container workspace
-docker cp plugins/ openclaw:/ai-agent/plugins/
-docker cp hooks/   openclaw:/ai-agent/hooks/
-docker cp skills/  openclaw:/ai-agent/skills/
-docker cp scripts/ openclaw:/ai-agent/scripts/
+## Other public projects
 
-# Restart to load plugins
-docker restart openclaw
-```
+- [`obsidian-qdrant-pipeline-oss`](https://github.com/vanessa49/obsidian-qdrant-pipeline-oss) — local-first document ingestion and retrieval for Obsidian + Qdrant, with explicit privacy boundaries and public-release guards.
+- [`nvidia-api-lifecycle-guard`](https://github.com/vanessa49/nvidia-api-lifecycle-guard) — a small Python toolkit for safely auditing changing NVIDIA hosted API / NIM integrations.
+- [`Fractal-Scripts`](https://github.com/vanessa49/Fractal-Scripts) — an early creative-coding project for generating and exploring fractal images.
 
-### 5. Ingest conversation history (optional)
+## Privacy and research boundary
 
-```bash
-# Process conversation logs into memory
-docker exec openclaw node /ai-agent/scripts/batch_process_conversations.js /ai-agent/memory/conversations
+Real conversation history, personal memory stores, private knowledge bases, training corpora, model artifacts, and current research material are not intended to be committed here.
 
-# Review generated training samples
-docker exec -it openclaw node /ai-agent/scripts/review_samples.js 50
-```
-
----
-
-## OpenClaw Version Note
-
-This project was built and tested on **OpenClaw `2026.3.11`** (as referenced in `config/openclaw.json.example`).
-
-> **NAS / air-gapped environments:** If your agent node has no direct internet access, you cannot `docker pull` directly. Transfer the image manually:
->
-> ```bash
-> # On a machine with internet access:
-> docker pull ghcr.io/openclaw/openclaw:latest
-> docker save ghcr.io/openclaw/openclaw:latest | gzip > openclaw-latest.tar.gz
->
-> # Transfer the file to your NAS, then on the NAS:
-> docker load < openclaw-latest.tar.gz
-> ```
->
-> Check [ghcr.io/openclaw/openclaw](https://ghcr.io/openclaw/openclaw) for the latest available version.
-
-To check which version is currently running on your agent node:
-
-```bash
-# Check the running container's image label
-docker inspect openclaw --format '{{index .Config.Labels "org.opencontainers.image.version"}}'
-
-# Or check via the config file inside the container
-docker exec openclaw cat /home/node/.openclaw/config.json | grep lastTouchedVersion
-
-# Or SSH into your NAS and run:
-docker images ghcr.io/openclaw/openclaw
-```
-
----
-
-## Current Status
-
-Working:
-- Plugin system (all 6 plugins)
-- Memory ingestion and hybrid search
-- Conversation processing pipeline
-- Training sample generation and review
-
-In progress:
-- Memory retrieval accuracy tuning
-- Automated fine-tuning pipeline
-- Agent activity dashboard
-
-> Note: Qdrant is used for experimental diagnostics and is not yet integrated into the memory retrieval pipeline.
-
----
-
-## Why This Project Exists
-
-Cloud AI models — GPT, Claude, Gemini — are trained on the output of billions of people. They represent collective intelligence at scale: optimized to be useful to everyone, shaped by aggregate data and company priorities.
-
-That's genuinely powerful. But "useful to everyone" is a different thing from "shaped by you."
-
-The question this project is exploring: what if a local, fine-tunable model could grow alongside a specific person? Not just remembering preferences on top — but having its actual reasoning patterns, tendencies, and ways of approaching problems gradually shaped by one individual's interactions over time.
-
-The key difference is ownership of growth. Cloud models evolve based on what the company decides. A local model can evolve based on what *you* actually do and think about.
-
-This is an early experiment in that direction. The architecture is in place; the self-improvement loop is still being assembled.
-
----
-
-## Long-Term Vision
-
-- Remember past conversations across sessions
-- Learn from historical interactions over time
-- Adapt to the habits and preferences of a specific user
-- Assist with research, knowledge management, and task automation
-- Integrate with personal devices and local services
-
-The agent is not meant to replace human thinking — it's meant to extend it.
-
----
-
-## Disclaimer
-
-This is a **research prototype**, not a production system. Expect rough edges.
-
----
+If you are reading this repository as part of the later research lineage, treat it as an **early engineering artifact**, not as the current manuscript or evidence source of truth.
 
 ## License
 
